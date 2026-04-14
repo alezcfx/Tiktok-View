@@ -81,7 +81,7 @@ do
         end
     end)
 
-    local SpeedBoost, NoSlowdown, InstantHeal, AntiKnock = false, false, false, false
+    local SpeedBoost, wasSpeedBoostActive, NoSlowdown, InstantHeal, AntiKnock = false, false, false, false, false
     local AntiBlind, AntiStun = false, false
     local FastVault = false
     local Aimbot, WallCheck, ShowFOVCircle = false, true, false
@@ -111,7 +111,6 @@ do
     local AimKey = Enum.KeyCode.Q
     local MenuOpen = true
 
-    -- ENI FIX: Fast Vault hook réécrit pour être 100% consistant avec le schéma client
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
@@ -119,11 +118,9 @@ do
         
         if not checkcaller() and method == "FireServer" and FastVault then
             if self.Name == "VaultEvent" and args[2] == false then
-                -- Intercepte le début du vault lent et le force en vault rapide
                 args[2] = true 
                 return oldNamecall(self, unpack(args))
             elseif self.Name == "VaultCompleteEvent" then
-                -- Juste avant que le jeu n'envoie la complétion, on injecte nos remotes de Fast Vault
                 local remotes = ReplicatedStorage:FindFirstChild("Remotes")
                 local windowRemotes = remotes and remotes:FindFirstChild("Window")
                 if windowRemotes then
@@ -133,7 +130,6 @@ do
                     local fastVaultRemote = windowRemotes:FindFirstChild("fastvault")
                     if fastVaultRemote then fastVaultRemote:FireServer(Players.LocalPlayer) end
                 end
-                -- On laisse ensuite passer le signal final normal
                 return oldNamecall(self, unpack(args))
             end
         end
@@ -457,7 +453,7 @@ do
 
     local Window = WindUI:CreateWindow({
         Title = "FORKT-HUB",
-        Author = "by @sukitovone",
+        Author = "by alz",
         Icon = "rbxassetid://92373688580867",
         Theme = ThemeName,
         Size = UDim2.fromOffset(800, 500),
@@ -509,9 +505,6 @@ do
     else
         Window:SetUIScale(1)
     end
-
-    Window:Tag({Title = "v1.0.6-Fixed", Icon = "github", Color = Color3.fromHex("#5e5c5c"), Border = true})
-    Window:Tag({Title = "Mobile Stable", Icon = IconsV2.GetIcon("Iphone"), Color = Color3.fromHex("#16de70"), Border = true})
 
     local TabProfile = Window:Tab({Title = "Profile", Icon = "rbxassetid://13585614795", IconThemed = true})
     local Tab1 = Window:Tab({Title = "Main", Icon = IconsV2.GetIcon("GamecontrollerFill")})
@@ -731,13 +724,9 @@ do
 
     TabSettings:Section({Title = "Credits & Information"})
     TabSettings:Paragraph({
-        Title = "Developer: @sukitovone | @forkt",
-        Desc = "Get the latest script updates, make suggestions, or report bugs directly to the developers!",
+        Title = "Developer: alz",
+        Desc = "Cleaned, optimized, and ready for action.",
         Image = "rbxassetid://18505728201",
-        Buttons = {{Title = "Copy Discord Link", Icon = IconsV2.GetIcon("Link"), Callback = function()
-            local s, r = pcall(function() setclipboard("https://discord.gg/forkt") end)
-            if s then WindUI:Notify({Title = "Succeed", Content = "Discord link copied!", Icon = IconsV2.GetIcon("CheckmarkCircle")}) end
-        end}}
     })
 
     local function PerformLeaveGenerator()
@@ -790,7 +779,6 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- ENI FIX: Mouse Toggle Fix pour forcer le LockCenter quand le menu se ferme
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.KeyCode == Enum.KeyCode.PageDown then
             MenuOpen = not MenuOpen
@@ -848,7 +836,6 @@ do
     dotStroke.Thickness = 0.5
 
     RunService.RenderStepped:Connect(function(deltaTime)
-        -- On ne force l'affichage de la souris QUE si le menu est ouvert. Sinon, le jeu gère le LockCenter.
         if MenuOpen then
             UserInputService.MouseIconEnabled = true
             UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -955,36 +942,15 @@ do
         
         if myChar and myHum then
             local targetSpeed = SpeedBoost and BoostSpeed or 16
-            local baseSpeed = 16
-            local scriptTarget = SpeedBoost and BoostSpeed or baseSpeed
-            local currentSpeed = myHum.WalkSpeed
-            local currentAttr = myHum:GetAttribute("WalkSpeed")
-            local safeSpeed = scriptTarget
             
-            if not SpeedBoost then
-                if currentSpeed > safeSpeed then safeSpeed = currentSpeed end
-                if currentAttr and type(currentAttr) == "number" and currentAttr > safeSpeed then
-                    safeSpeed = currentAttr
-                end
-            end
-            
-            if SpeedBoost or NoSlowdown then
-                if SpeedBoost and myHum.WalkSpeed ~= scriptTarget then
-                    myHum.WalkSpeed = scriptTarget
-                end
-                if NoSlowdown and myHum.WalkSpeed < safeSpeed then
-                    myHum.WalkSpeed = safeSpeed
-                end
-                if currentAttr and type(currentAttr) == "number" then
-                    if SpeedBoost and currentAttr ~= scriptTarget then
-                        myHum:SetAttribute("WalkSpeed", scriptTarget)
-                    elseif NoSlowdown and currentAttr < safeSpeed then
-                        myHum:SetAttribute("WalkSpeed", safeSpeed)
-                    end
-                end
-            else
-                if myHum.WalkSpeed == BoostSpeed then myHum.WalkSpeed = baseSpeed end
-                if currentAttr == BoostSpeed then myHum:SetAttribute("WalkSpeed", baseSpeed) end
+            if SpeedBoost then
+                myHum.WalkSpeed = targetSpeed
+                if myHum:GetAttribute("WalkSpeed") then myHum:SetAttribute("WalkSpeed", targetSpeed) end
+                wasSpeedBoostActive = true
+            elseif wasSpeedBoostActive then
+                myHum.WalkSpeed = 16
+                if myHum:GetAttribute("WalkSpeed") then myHum:SetAttribute("WalkSpeed", 16) end
+                wasSpeedBoostActive = false
             end
             
             if InstantHeal and myHum.Health < myHum.MaxHealth then
@@ -1191,7 +1157,10 @@ do
 
     LocalPlayer.CharacterAdded:Connect(function(char)
         local hum = char:WaitForChild("Humanoid")
-        if SpeedBoost then hum.WalkSpeed = BoostSpeed end
+        if SpeedBoost then 
+            hum.WalkSpeed = BoostSpeed
+            if hum:GetAttribute("WalkSpeed") then hum:SetAttribute("WalkSpeed", BoostSpeed) end
+        end
     end)
 
     task.spawn(function()
