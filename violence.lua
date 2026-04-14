@@ -14,19 +14,22 @@ do
 
     local TargetGui = (pcall(function() return cloneref(game:GetService("CoreGui")) end) and game:GetService("CoreGui")) or PlayerGui
 
-    local function LoadLibrary()
+    local function SafeLoad(url)
         local success, result = pcall(function()
-            return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+            return loadstring(game:HttpGet(url))()
         end)
-        return (success and result) or nil
+        return success and result or nil
     end
 
-    local WindUI = LoadLibrary()
+    local WindUI = SafeLoad("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua")
     if not WindUI then
         return game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Error", Text = "Failed to load UI."})
     end
 
-    local IconsV2 = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/Icons/main/Main-v2.lua"))()
+    local IconsV2 = SafeLoad("https://raw.githubusercontent.com/Footagesus/Icons/main/Main-v2.lua")
+    if not IconsV2 then
+        IconsV2 = {GetIcon = function() return "" end, SetIconsType = function() end}
+    end
     IconsV2.SetIconsType("sfsymbols")
 
     local ESP_COLORS = {
@@ -106,39 +109,48 @@ do
     local ESP_Survivor, ESP_Killer, ESP_Generator, ESP_Gate, ESP_Pallet, ESP_Hook = false, false, false, false, false, false
     local ActiveESP = {}
     local LastUpdateTick, LastESPRefresh = 0, 0
-    local TouchID, ActionPath = 8822, "Survivor-mob.Controls.action.check"
-    local isTriggering = false
     local FOVCircle = nil
     local AimDistance = 150
-    local AimKey = Enum.KeyCode.Q
     local MenuOpen = true
 
-    -- Invis Variables (From old script)
-    local seatTeleportPosition = Vector3.new(-25.95, 400, 3537.55) [cite: 266]
-    local currentSeatPosition = nil [cite: 266]
-    local seatReturnHeartbeatConnection = nil [cite: 266]
+    -- INVISIBILITY HELPERS (The missing pieces that caused the crash)
+    local seatTeleportPosition = Vector3.new(-25.95, 400, 3537.55)
+    local currentSeatPosition = nil
+    local seatReturnHeartbeatConnection = nil
 
     local function startSeatReturnHeartbeat()
         if seatReturnHeartbeatConnection then
-            seatReturnHeartbeatConnection:Disconnect() [cite: 277]
-            seatReturnHeartbeatConnection = nil [cite: 278]
+            seatReturnHeartbeatConnection:Disconnect()
+            seatReturnHeartbeatConnection = nil
         end
-        seatReturnHeartbeatConnection = RunService.Heartbeat:Connect(function() end) [cite: 278]
+        seatReturnHeartbeatConnection = RunService.Heartbeat:Connect(function() end)
     end
 
     local function stopSeatReturnHeartbeat()
         if seatReturnHeartbeatConnection then
-            seatReturnHeartbeatConnection:Disconnect() [cite: 278]
-            seatReturnHeartbeatConnection = nil [cite: 278]
+            seatReturnHeartbeatConnection:Disconnect()
+            seatReturnHeartbeatConnection = nil
         end
     end
 
     local function setCharacterTransparency(transparency)
-        local character = Players.LocalPlayer.Character [cite: 275]
-        if character then [cite: 275]
-            for _, part in pairs(character:GetDescendants()) do [cite: 275]
-                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then [cite: 276]
-                    part.Transparency = transparency [cite: 276]
+        local character = Players.LocalPlayer.Character
+        if character then
+            for _, part in ipairs(character:GetDescendants()) do
+                if (part:IsA("BasePart") or part:IsA("Decal")) and part.Name ~= "HumanoidRootPart" then
+                    if part:GetAttribute("SavedTrans") == nil then
+                        part:SetAttribute("SavedTrans", part.Transparency)
+                    end
+                    
+                    if transparency == 0 then
+                        local saved = part:GetAttribute("SavedTrans")
+                        if saved ~= nil then
+                            part.Transparency = saved
+                            part:SetAttribute("SavedTrans", nil)
+                        end
+                    else
+                        part.Transparency = transparency
+                    end
                 end
             end
         end
@@ -146,29 +158,31 @@ do
 
     -- FAST VAULT HOOK
     local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-        
-        if not checkcaller() and method == "FireServer" and FastVault then
-            if self.Name == "VaultEvent" and args[2] == false then
-                args[2] = true 
-                return oldNamecall(self, unpack(args))
-            elseif self.Name == "VaultCompleteEvent" then
-                local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                local windowRemotes = remotes and remotes:FindFirstChild("Window")
-                if windowRemotes then
-                    local vaultCompletePart1 = windowRemotes:FindFirstChild("VaultCompleteEventpart1")
-                    if vaultCompletePart1 then vaultCompletePart1:FireServer() end
-                    
-                    local fastVaultRemote = windowRemotes:FindFirstChild("fastvault")
-                    if fastVaultRemote then fastVaultRemote:FireServer(Players.LocalPlayer) end
+    if type(hookmetamethod) == "function" then
+        oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
+            
+            if not checkcaller() and method == "FireServer" and FastVault then
+                if self.Name == "VaultEvent" and args[2] == false then
+                    args[2] = true 
+                    return oldNamecall(self, unpack(args))
+                elseif self.Name == "VaultCompleteEvent" then
+                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                    local windowRemotes = remotes and remotes:FindFirstChild("Window")
+                    if windowRemotes then
+                        local vaultCompletePart1 = windowRemotes:FindFirstChild("VaultCompleteEventpart1")
+                        if vaultCompletePart1 then vaultCompletePart1:FireServer() end
+                        
+                        local fastVaultRemote = windowRemotes:FindFirstChild("fastvault")
+                        if fastVaultRemote then fastVaultRemote:FireServer(Players.LocalPlayer) end
+                    end
+                    return oldNamecall(self, unpack(args))
                 end
-                return oldNamecall(self, unpack(args))
             end
-        end
-        return oldNamecall(self, ...)
-    end)
+            return oldNamecall(self, ...)
+        end)
+    end
 
     -- PERFECT GEN (GC SNIPER) EVENT HANDLER
     task.spawn(function()
@@ -183,25 +197,27 @@ do
                 if not PerfectGen then return end
                 task.wait(0.2) 
                 
-                for _, func in pairs(getgc(true)) do
-                    if type(func) == "function" and islclosure(func) then
-                        local info = debug.getinfo(func)
-                        
-                        if info.source and info.source:match("Skillcheck%-gen") and info.nups == 15 then
-                            local upvals = debug.getupvalues(func)
+                if type(getgc) == "function" then
+                    for _, func in pairs(getgc(true)) do
+                        if type(func) == "function" and islclosure(func) then
+                            local info = debug.getinfo(func)
                             
-                            if upvals[1] == true then
-                                debug.setupvalue(func, 2, false)
+                            if info.source and info.source:match("Skillcheck%-gen") and info.nups == 15 then
+                                local upvals = debug.getupvalues(func)
                                 
-                                local lineFrame = upvals[5]
-                                local goalFrame = upvals[6]
-                                
-                                if lineFrame and goalFrame then
-                                    lineFrame.Rotation = goalFrame.Rotation + 109
+                                if upvals[1] == true then
+                                    debug.setupvalue(func, 2, false)
+                                    
+                                    local lineFrame = upvals[5]
+                                    local goalFrame = upvals[6]
+                                    
+                                    if lineFrame and goalFrame then
+                                        lineFrame.Rotation = goalFrame.Rotation + 109
+                                    end
+                                    
+                                    func("success")
+                                    break 
                                 end
-                                
-                                func("success")
-                                break 
                             end
                         end
                     end
@@ -650,68 +666,69 @@ do
     end})
     Tab1:Toggle({Title = "Invisible Mode", Desc = "True Server-Sided Invisibility. You become a ghost.", Flag = "F_Invisible", Value = false, Callback = function(v)
         IsInvisible = v
-        
         local character = Players.LocalPlayer.Character
         if not character then return end
 
         if v then
-            -- ENABLE INVISIBILITY (Server Desync Method from Maincode.txt)
-            setCharacterTransparency(0.5) -- Make local character semi-transparent
-            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart") [cite: 285]
+            setCharacterTransparency(0.5)
+            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
             if humanoidRootPart then
-                local savedpos = humanoidRootPart.CFrame [cite: 286]
-                pcall(function() character:MoveTo(seatTeleportPosition) end) [cite: 287]
+                local savedpos = humanoidRootPart.CFrame
+                pcall(function() character:MoveTo(seatTeleportPosition) end)
                 task.wait(0.1)
                 
-                local Seat = Instance.new('Seat') [cite: 290]
-                Seat.Parent = workspace [cite: 290]
-                Seat.Anchored = false [cite: 290]
-                Seat.CanCollide = false [cite: 290]
-                Seat.Name = 'invischair' [cite: 291]
-                Seat.Transparency = 1 [cite: 291]
-                Seat.Position = seatTeleportPosition [cite: 291]
+                local Seat = Instance.new('Seat')
+                Seat.Parent = workspace
+                Seat.Anchored = false
+                Seat.CanCollide = false
+                Seat.Name = 'invischair'
+                Seat.Transparency = 1
+                Seat.Position = seatTeleportPosition
                 
-                local Weld = Instance.new("Weld") [cite: 291]
-                Weld.Part0 = Seat [cite: 291]
-                local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso") [cite: 292]
+                local Weld = Instance.new("Weld")
+                Weld.Part0 = Seat
+                local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
                 
                 if torso then
-                    Weld.Part1 = torso [cite: 293]
-                    Weld.Parent = Seat [cite: 293]
+                    Weld.Part1 = torso
+                    Weld.Parent = Seat
                     task.wait()
-                    pcall(function() Seat.CFrame = savedpos end) [cite: 293]
-                    currentSeatPosition = Seat.Position [cite: 294]
-                    startSeatReturnHeartbeat() [cite: 294]
+                    pcall(function() Seat.CFrame = savedpos end)
+                    currentSeatPosition = Seat.Position
+                    startSeatReturnHeartbeat()
                     WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are now a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
                 else
-                    Seat:Destroy() [cite: 294]
-                    currentSeatPosition = nil [cite: 295]
-                    stopSeatReturnHeartbeat() [cite: 295]
-                    WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso found).", Icon = IconsV2.GetIcon("Xmark")})
+                    Seat:Destroy()
+                    currentSeatPosition = nil
+                    stopSeatReturnHeartbeat()
+                    WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
                 end
+            end
+            
+            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
+            if not h then
+                h = Instance.new("Highlight")
+                h.Name = "GhostHighlight_" .. LocalPlayer.Name
+                h.Adornee = character
+                h.FillColor = Color3.fromRGB(255, 255, 255)
+                h.FillTransparency = 0.65
+                h.OutlineColor = Color3.fromRGB(200, 200, 200)
+                h.OutlineTransparency = 0.1
+                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                h.Parent = TargetGui
             end
         else
-            -- DISABLE INVISIBILITY
-            setCharacterTransparency(0) [cite: 298]
-            stopSeatReturnHeartbeat() [cite: 299]
-            currentSeatPosition = nil [cite: 299]
+            setCharacterTransparency(0)
+            stopSeatReturnHeartbeat()
+            currentSeatPosition = nil
             
             task.spawn(function()
-                local inv = workspace:FindFirstChild('invischair') [cite: 298]
-                if inv then
-                    pcall(function() inv:Destroy() end) [cite: 298]
-                end
+                local inv = workspace:FindFirstChild('invischair')
+                if inv then pcall(function() inv:Destroy() end) end
             end)
             
-            -- Ensure full visibility restoration (catching the white pipe)
-            if character then
-                for _, part in ipairs(character:GetDescendants()) do
-                    if (part:IsA("BasePart") or part:IsA("Decal")) and part.Name ~= "HumanoidRootPart" then
-                        -- Forcing it visible, clearing any weird states
-                        part.Transparency = 0 
-                    end
-                end
-            end
+            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
+            if h then h:Destroy() end
             
             WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. You are visible.", Icon = IconsV2.GetIcon("Eye")})
         end
