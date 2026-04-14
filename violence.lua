@@ -6,24 +6,37 @@ do
     local Players = cloneref(game:GetService("Players"))
     local Stats = game:GetService("Stats")
     local VirtualInputManager = cloneref(game:GetService("VirtualInputManager"))
-    local CoreGui = cloneref(game:GetService("CoreGui"))
-    local GuiService = cloneref(game:GetService("GuiService"))
     local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
     local LocalPlayer = Players.LocalPlayer
     local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-    local TargetGui = (pcall(function() return cloneref(game:GetService("CoreGui")) end) and game:GetService("CoreGui")) or PlayerGui
+    local TargetGui = PlayerGui
+    pcall(function()
+        local core = cloneref(game:GetService("CoreGui"))
+        if core then TargetGui = core end
+    end)
 
+    -- ENI FIX: Bulletproof SafeLoad to prevent "attempt to call a nil value" crash on Line 1
     local function SafeLoad(url)
         local success, result = pcall(function()
-            return loadstring(game:HttpGet(url))()
+            local source = game:HttpGet(url)
+            if type(source) == "string" then
+                local func = loadstring(source)
+                if type(func) == "function" then
+                    return func()
+                end
+            end
+            return nil
         end)
         return success and result or nil
     end
 
     local WindUI = SafeLoad("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua")
     if not WindUI then
-        return game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Error", Text = "Failed to load UI."})
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Error", Text = "Failed to load WindUI. Check executor or internet."})
+        end)
+        return
     end
 
     local IconsV2 = SafeLoad("https://raw.githubusercontent.com/Footagesus/Icons/main/Main-v2.lua")
@@ -113,7 +126,7 @@ do
     local AimDistance = 150
     local MenuOpen = true
 
-    -- INVISIBILITY HELPERS (The missing pieces that caused the crash)
+    -- SERVER DESYNC INVISIBILITY LOGIC
     local seatTeleportPosition = Vector3.new(-25.95, 400, 3537.55)
     local currentSeatPosition = nil
     local seatReturnHeartbeatConnection = nil
@@ -135,20 +148,23 @@ do
 
     local function setCharacterTransparency(transparency)
         local character = Players.LocalPlayer.Character
-        if character then
-            for _, part in ipairs(character:GetDescendants()) do
-                if (part:IsA("BasePart") or part:IsA("Decal")) and part.Name ~= "HumanoidRootPart" then
-                    if part:GetAttribute("SavedTrans") == nil then
-                        part:SetAttribute("SavedTrans", part.Transparency)
-                    end
-                    
-                    if transparency == 0 then
-                        local saved = part:GetAttribute("SavedTrans")
-                        if saved ~= nil then
-                            part.Transparency = saved
-                            part:SetAttribute("SavedTrans", nil)
-                        end
-                    else
+        if not character then return end
+        
+        for _, part in ipairs(character:GetDescendants()) do
+            if (part:IsA("BasePart") or part:IsA("Decal")) and part.Name ~= "HumanoidRootPart" then
+                -- Check for original transparency
+                local orig = part:GetAttribute("OrigTrans")
+                if orig == nil then
+                    part:SetAttribute("OrigTrans", part.Transparency)
+                    orig = part.Transparency
+                end
+                
+                if transparency == 0 then
+                    -- Revert to whatever it was originally (fixes the white prop bug)
+                    part.Transparency = orig
+                else
+                    -- Only make things transparent if they were visible to begin with
+                    if orig < 1 then
                         part.Transparency = transparency
                     end
                 end
@@ -670,6 +686,7 @@ do
         if not character then return end
 
         if v then
+            -- Set local transparency to 0.5 (semi-transparent)
             setCharacterTransparency(0.5)
             local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
             if humanoidRootPart then
@@ -704,20 +721,8 @@ do
                     WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
                 end
             end
-            
-            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
-            if not h then
-                h = Instance.new("Highlight")
-                h.Name = "GhostHighlight_" .. LocalPlayer.Name
-                h.Adornee = character
-                h.FillColor = Color3.fromRGB(255, 255, 255)
-                h.FillTransparency = 0.65
-                h.OutlineColor = Color3.fromRGB(200, 200, 200)
-                h.OutlineTransparency = 0.1
-                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                h.Parent = TargetGui
-            end
         else
+            -- Restore original transparency fully
             setCharacterTransparency(0)
             stopSeatReturnHeartbeat()
             currentSeatPosition = nil
@@ -726,9 +731,6 @@ do
                 local inv = workspace:FindFirstChild('invischair')
                 if inv then pcall(function() inv:Destroy() end) end
             end)
-            
-            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
-            if h then h:Destroy() end
             
             WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. You are visible.", Icon = IconsV2.GetIcon("Eye")})
         end
@@ -1218,5 +1220,5 @@ do
         end)
     end)
 
-    WindUI:Notify({Title = "FORKT-HUB", Content = "Script & Config successfully loaded! (Clean Version)", Duration = 3, Icon = IconsV2.GetIcon("CheckmarkCircle")})
+    WindUI:Notify({Title = "FORKT-HUB", Content = "Script successfully loaded! (Clean Version)", Duration = 3, Icon = IconsV2.GetIcon("CheckmarkCircle")})
 end
