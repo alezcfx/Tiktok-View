@@ -113,6 +113,38 @@ do
     local AimKey = Enum.KeyCode.Q
     local MenuOpen = true
 
+    -- Invis Variables (From old script)
+    local seatTeleportPosition = Vector3.new(-25.95, 400, 3537.55) [cite: 266]
+    local currentSeatPosition = nil [cite: 266]
+    local seatReturnHeartbeatConnection = nil [cite: 266]
+
+    local function startSeatReturnHeartbeat()
+        if seatReturnHeartbeatConnection then
+            seatReturnHeartbeatConnection:Disconnect() [cite: 277]
+            seatReturnHeartbeatConnection = nil [cite: 278]
+        end
+        seatReturnHeartbeatConnection = RunService.Heartbeat:Connect(function() end) [cite: 278]
+    end
+
+    local function stopSeatReturnHeartbeat()
+        if seatReturnHeartbeatConnection then
+            seatReturnHeartbeatConnection:Disconnect() [cite: 278]
+            seatReturnHeartbeatConnection = nil [cite: 278]
+        end
+    end
+
+    local function setCharacterTransparency(transparency)
+        local character = Players.LocalPlayer.Character [cite: 275]
+        if character then [cite: 275]
+            for _, part in pairs(character:GetDescendants()) do [cite: 275]
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then [cite: 276]
+                    part.Transparency = transparency [cite: 276]
+                end
+            end
+        end
+    end
+
+    -- FAST VAULT HOOK
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
@@ -138,6 +170,7 @@ do
         return oldNamecall(self, ...)
     end)
 
+    -- PERFECT GEN (GC SNIPER) EVENT HANDLER
     task.spawn(function()
         local GeneratorRemote = ReplicatedStorage:WaitForChild("Remotes", 10)
         if GeneratorRemote then
@@ -615,26 +648,72 @@ do
         FastVault = v
         WindUI:Notify({Title = "Fast Vault", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
     end})
-    Tab1:Toggle({Title = "Invisible Mode", Desc = "You become invisible to others but look like a ghost on your screen.", Flag = "F_Invisible", Value = false, Callback = function(v)
+    Tab1:Toggle({Title = "Invisible Mode", Desc = "True Server-Sided Invisibility. You become a ghost.", Flag = "F_Invisible", Value = false, Callback = function(v)
         IsInvisible = v
-        WindUI:Notify({Title = "Invisible Mode", Content = v and "You are now a ghost." or "Invisibility disabled.", Icon = v and IconsV2.GetIcon("EyeSlashFill") or IconsV2.GetIcon("Eye")})
         
-        -- ENI FIX: Nettoyage et restauration stricte à la désactivation
-        if not v then
-            local char = LocalPlayer.Character
-            if char then
-                for _, part in ipairs(char:GetDescendants()) do
+        local character = Players.LocalPlayer.Character
+        if not character then return end
+
+        if v then
+            -- ENABLE INVISIBILITY (Server Desync Method from Maincode.txt)
+            setCharacterTransparency(0.5) -- Make local character semi-transparent
+            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart") [cite: 285]
+            if humanoidRootPart then
+                local savedpos = humanoidRootPart.CFrame [cite: 286]
+                pcall(function() character:MoveTo(seatTeleportPosition) end) [cite: 287]
+                task.wait(0.1)
+                
+                local Seat = Instance.new('Seat') [cite: 290]
+                Seat.Parent = workspace [cite: 290]
+                Seat.Anchored = false [cite: 290]
+                Seat.CanCollide = false [cite: 290]
+                Seat.Name = 'invischair' [cite: 291]
+                Seat.Transparency = 1 [cite: 291]
+                Seat.Position = seatTeleportPosition [cite: 291]
+                
+                local Weld = Instance.new("Weld") [cite: 291]
+                Weld.Part0 = Seat [cite: 291]
+                local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso") [cite: 292]
+                
+                if torso then
+                    Weld.Part1 = torso [cite: 293]
+                    Weld.Parent = Seat [cite: 293]
+                    task.wait()
+                    pcall(function() Seat.CFrame = savedpos end) [cite: 293]
+                    currentSeatPosition = Seat.Position [cite: 294]
+                    startSeatReturnHeartbeat() [cite: 294]
+                    WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are now a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+                else
+                    Seat:Destroy() [cite: 294]
+                    currentSeatPosition = nil [cite: 295]
+                    stopSeatReturnHeartbeat() [cite: 295]
+                    WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso found).", Icon = IconsV2.GetIcon("Xmark")})
+                end
+            end
+        else
+            -- DISABLE INVISIBILITY
+            setCharacterTransparency(0) [cite: 298]
+            stopSeatReturnHeartbeat() [cite: 299]
+            currentSeatPosition = nil [cite: 299]
+            
+            task.spawn(function()
+                local inv = workspace:FindFirstChild('invischair') [cite: 298]
+                if inv then
+                    pcall(function() inv:Destroy() end) [cite: 298]
+                end
+            end)
+            
+            -- Ensure full visibility restoration (catching the white pipe)
+            if character then
+                for _, part in ipairs(character:GetDescendants()) do
                     if (part:IsA("BasePart") or part:IsA("Decal")) and part.Name ~= "HumanoidRootPart" then
-                        local saved = part:GetAttribute("SavedTrans")
-                        if saved ~= nil then
-                            part.Transparency = saved
-                            part:SetAttribute("SavedTrans", nil) -- On nettoie la sauvegarde
-                        end
+                        -- Forcing it visible, clearing any weird states
+                        part.Transparency = 0 
                     end
                 end
             end
-            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
-            if h then h:Destroy() end
+            
+            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. You are visible.", Icon = IconsV2.GetIcon("Eye")})
         end
     end})
 
@@ -896,7 +975,6 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
-    -- ENI FIX: Force WalkSpeed explicitly right before rendering so the game can't override it (crucial for Survivor)
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -954,34 +1032,6 @@ do
         local myChar = LocalPlayer.Character
         local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
         local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        
-        -- ENI FIX: Invisible Loop with strict `nil` check to perfectly save/restore states
-        if IsInvisible and myChar then
-            for _, part in ipairs(myChar:GetDescendants()) do
-                if (part:IsA("BasePart") or part:IsA("Decal")) and part.Name ~= "HumanoidRootPart" then
-                    if part:GetAttribute("SavedTrans") == nil then
-                        part:SetAttribute("SavedTrans", part.Transparency)
-                    end
-                    if part.Transparency ~= 1 then
-                        part.Transparency = 1
-                    end
-                end
-            end
-            
-            -- Ghost Highlight inside TargetGui to bypass character invisibility masking
-            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
-            if not h then
-                h = Instance.new("Highlight")
-                h.Name = "GhostHighlight_" .. LocalPlayer.Name
-                h.Adornee = myChar
-                h.FillColor = Color3.fromRGB(255, 255, 255)
-                h.FillTransparency = 0.65
-                h.OutlineColor = Color3.fromRGB(200, 200, 200)
-                h.OutlineTransparency = 0.1
-                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                h.Parent = TargetGui
-            end
-        end
 
         if myChar then
             local mouse = LocalPlayer:GetMouse()
