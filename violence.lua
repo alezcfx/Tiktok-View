@@ -615,17 +615,37 @@ do
         FastVault = v
         WindUI:Notify({Title = "Fast Vault", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
     end})
-    Tab1:Toggle({Title = "Invisible Mode", Desc = "Makes your character completely invisible and undetectable.", Flag = "F_Invisible", Value = false, Callback = function(v)
+    Tab1:Toggle({Title = "Invisible Mode", Desc = "You become invisible to others but look like a ghost on your screen.", Flag = "F_Invisible", Value = false, Callback = function(v)
         IsInvisible = v
         WindUI:Notify({Title = "Invisible Mode", Content = v and "You are now a ghost." or "Invisibility disabled.", Icon = v and IconsV2.GetIcon("EyeSlashFill") or IconsV2.GetIcon("Eye")})
-        -- Appliquer la transparence immédiatement s'il le désactive pour nettoyer
-        if not v then
-            local char = LocalPlayer.Character
-            if char then
+        
+        local char = LocalPlayer.Character
+        if char then
+            if not v then
+                -- Restaure la vraie transparence des objets originaux
                 for _, part in ipairs(char:GetDescendants()) do
-                    if (part:IsA("BasePart") and part.Name ~= "HumanoidRootPart") or part:IsA("Decal") then
-                        part.Transparency = 0
+                    if (part:IsA("BasePart") or part:IsA("Decal")) and part.Name ~= "HumanoidRootPart" then
+                        local orig = part:GetAttribute("OrigTrans")
+                        if orig then
+                            part.Transparency = orig
+                        end
                     end
+                end
+                -- Supprime l'effet fantôme local
+                local h = char:FindFirstChild("GhostHighlight")
+                if h then h:Destroy() end
+            else
+                -- Crée l'effet fantôme local
+                local h = char:FindFirstChild("GhostHighlight")
+                if not h then
+                    h = Instance.new("Highlight")
+                    h.Name = "GhostHighlight"
+                    h.FillColor = Color3.fromRGB(255, 255, 255)
+                    h.OutlineColor = Color3.fromRGB(200, 200, 200)
+                    h.FillTransparency = 0.5
+                    h.OutlineTransparency = 0.5
+                    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    h.Parent = char
                 end
             end
         end
@@ -943,8 +963,15 @@ do
         -- INVISIBLE LOOP
         if IsInvisible and myChar then
             for _, part in ipairs(myChar:GetDescendants()) do
-                if (part:IsA("BasePart") and part.Name ~= "HumanoidRootPart") or part:IsA("Decal") then
-                    part.Transparency = 1
+                if (part:IsA("BasePart") or part:IsA("Decal")) and part.Name ~= "HumanoidRootPart" then
+                    -- Sauvegarde de la transparence originelle pour éviter le bug du "tuyau blanc"
+                    if not part:GetAttribute("OrigTrans") then
+                        part:SetAttribute("OrigTrans", part.Transparency)
+                    end
+                    -- Force l'invisibilité serveur
+                    if part.Transparency ~= 1 then
+                        part.Transparency = 1
+                    end
                 end
             end
         end
