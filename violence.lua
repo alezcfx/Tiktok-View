@@ -84,19 +84,19 @@ do
     local SpeedBoost, wasSpeedBoostActive, NoSlowdown, InstantHeal, AntiKnock = false, false, false, false, false
     local AntiBlind, AntiStun = false, false
     local FastVault = false
+    local IsInvisible = false
     local Aimbot, WallCheck, ShowFOVCircle = false, true, false
     local CustomCameraFOV = false
     local BoostSpeed, CameraFOVValue, AimRadius = 24, 100, 200
     local AutoAttack = false
     local AttackRange = 10
-    local AutoGenerator = false
+    local PerfectGen = false
     local WarnKiller = true
     local ActiveGenerators = {}
     local ThemeName = "Crimson"
     local Refreshing = false
     local AutoRotate = false
     local AutoUnhook = false
-    local AutoGeneratorMode = "Great (Perfect)"
     local EnableLeaveGen = false
     local LeaveGenDistance = 25
     local MobileLeaveButton = nil
@@ -111,6 +111,7 @@ do
     local AimKey = Enum.KeyCode.Q
     local MenuOpen = true
 
+    -- FAST VAULT HOOK
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
@@ -134,6 +135,46 @@ do
             end
         end
         return oldNamecall(self, ...)
+    end)
+
+    -- PERFECT GEN (GC SNIPER) EVENT HANDLER
+    task.spawn(function()
+        local GeneratorRemote = ReplicatedStorage:WaitForChild("Remotes", 10)
+        if GeneratorRemote then
+            GeneratorRemote = GeneratorRemote:WaitForChild("Generator", 10)
+        end
+        local SkillCheckEvent = GeneratorRemote and GeneratorRemote:WaitForChild("SkillCheckEvent", 10)
+        
+        if SkillCheckEvent then
+            SkillCheckEvent.OnClientEvent:Connect(function()
+                if not PerfectGen then return end
+                task.wait(0.2) 
+                
+                for _, func in pairs(getgc(true)) do
+                    if type(func) == "function" and islclosure(func) then
+                        local info = debug.getinfo(func)
+                        
+                        if info.source and info.source:match("Skillcheck%-gen") and info.nups == 15 then
+                            local upvals = debug.getupvalues(func)
+                            
+                            if upvals[1] == true then
+                                debug.setupvalue(func, 2, false)
+                                
+                                local lineFrame = upvals[5]
+                                local goalFrame = upvals[6]
+                                
+                                if lineFrame and goalFrame then
+                                    lineFrame.Rotation = goalFrame.Rotation + 109
+                                end
+                                
+                                func("success")
+                                break 
+                            end
+                        end
+                    end
+                end
+            end)
+        end
     end)
 
     local function GetGameValue(obj, name)
@@ -574,6 +615,21 @@ do
         FastVault = v
         WindUI:Notify({Title = "Fast Vault", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
     end})
+    Tab1:Toggle({Title = "Invisible Mode", Desc = "Makes your character completely invisible and undetectable.", Flag = "F_Invisible", Value = false, Callback = function(v)
+        IsInvisible = v
+        WindUI:Notify({Title = "Invisible Mode", Content = v and "You are now a ghost." or "Invisibility disabled.", Icon = v and IconsV2.GetIcon("EyeSlashFill") or IconsV2.GetIcon("Eye")})
+        -- Appliquer la transparence immédiatement s'il le désactive pour nettoyer
+        if not v then
+            local char = LocalPlayer.Character
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if (part:IsA("BasePart") and part.Name ~= "HumanoidRootPart") or part:IsA("Decal") then
+                        part.Transparency = 0
+                    end
+                end
+            end
+        end
+    end})
 
     Tab1:Section({Title = "Camera View"})
     Tab1:Toggle({Title = "Enable Custom FOV", Desc = "Enable view distance customization.", Flag = "F_CustomFOV", Value = false, Callback = function(v)
@@ -677,15 +733,14 @@ do
     Tab3:Slider({Title = "Attack Range (Studs)", Step = 1, IsTooltip = true, Flag = "F_AttackRange", Value = {Min = 5, Max = 25, Default = 10}, Callback = function(v) AttackRange = v end})
 
     Tab4:Section({Title = "Game Logic"})
-    Tab4:Toggle({Title = "Auto Generator", Desc = "Working on generator automatically.", Flag = "F_AutoGen", Value = false, Callback = function(v)
-        AutoGenerator = v
-        WindUI:Notify({Title = "Auto Generator", Content = v and "Skillcheck Bot enabled." or "Skillcheck Bot disabled.", Icon = v and IconsV2.GetIcon("CpuFill") or IconsV2.GetIcon("Cpu")})
+    Tab4:Toggle({Title = "Perfect Gen", Desc = "Snipe skillchecks perfectly using GC.", Flag = "F_PerfectGen", Value = false, Callback = function(v)
+        PerfectGen = v
+        WindUI:Notify({Title = "Perfect Gen", Content = v and "Perfect Gen enabled!" or "Perfect Gen disabled.", Icon = v and IconsV2.GetIcon("CpuFill") or IconsV2.GetIcon("Cpu")})
     end})
     Tab4:Toggle({Title = "Instant Unhook", Desc = "Automatically free yourself instantly when hooked.", Flag = "F_AutoUnhook", Value = false, Callback = function(v)
         AutoUnhook = v
         WindUI:Notify({Title = "Auto Unhook", Content = v and "Active! You will drop from the Hook instantly." or "Disabled.", Icon = v and IconsV2.GetIcon("LinkSlash") or IconsV2.GetIcon("Link")})
     end})
-    Tab4:Dropdown({Title = "Generator Mode", Desc = "Select completion speed.", Values = {"Great (Perfect)", "Success (Instant)"}, Value = "Great (Perfect)", Flag = "F_GenMode", Callback = function(Option) AutoGeneratorMode = Option end})
 
     Tab4:Section({Title = "Escape Utilities"})
     Tab4:Toggle({Title = "Enable Auto Leave Generator", Desc = UserInputService.TouchEnabled and "Shows LEAVE button on screen." or "Use [F] key to escape from Generator.", Flag = "F_LeaveGen", Value = false, Callback = function(v)
@@ -885,6 +940,15 @@ do
         local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
         local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
         
+        -- INVISIBLE LOOP
+        if IsInvisible and myChar then
+            for _, part in ipairs(myChar:GetDescendants()) do
+                if (part:IsA("BasePart") and part.Name ~= "HumanoidRootPart") or part:IsA("Decal") then
+                    part.Transparency = 1
+                end
+            end
+        end
+
         if myChar then
             local mouse = LocalPlayer:GetMouse()
             if mouse.TargetFilter ~= myChar then
@@ -1031,123 +1095,6 @@ do
                                     end
                                 end
                             end
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-    task.spawn(function()
-        while task.wait(0.1) do
-            if AutoGenerator then
-                pcall(function()
-                    local myChar = LocalPlayer.Character
-                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                    local myHum = myChar and myChar:FindFirstChild("Humanoid")
-                    if not myRoot or not myHum then return end
-                    
-                    local isMoving = myHum.MoveDirection.Magnitude > 0.1
-                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                    local genRemotes = remotes and remotes:FindFirstChild("Generator")
-                    local repairEvent = genRemotes and genRemotes:FindFirstChild("RepairEvent")
-                    local skillCheckEvent = genRemotes and genRemotes:FindFirstChild("SkillCheckResultEvent")
-                    if not repairEvent or not skillCheckEvent then return end
-                    
-                    local map = workspace:FindFirstChild("Map")
-                    if not map then return end
-                    
-                    local isHealingTarget = false
-                    local survDist = 15
-                    for _, p in ipairs(Players:GetPlayers()) do
-                        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                            local team = (p.Team and p.Team.Name:lower()) or ""
-                            if not team:find("killer") then
-                                local isKnocked = GetGameValue(p.Character, "Knocked")
-                                local hum = p.Character:FindFirstChild("Humanoid")
-                                local isInjured = hum and (hum.Health < hum.MaxHealth)
-                                if isKnocked or isInjured then
-                                    local dist = (myRoot.Position - p.Character.HumanoidRootPart.Position).Magnitude
-                                    if dist <= survDist then
-                                        isHealingTarget = true
-                                        break
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    if isHealingTarget then return end
-                    
-                    local nearestGen, nearestPoint
-                    local genDist = 12
-                    for _, obj in ipairs(CachedMapObjects.Generators) do
-                        if obj:IsA("Model") and obj.Name == "Generator" then
-                            for _, point in ipairs(obj:GetChildren()) do
-                                if point.Name:find("GeneratorPoint") then
-                                    local dist = (myRoot.Position - point.Position).Magnitude
-                                    if dist < genDist then
-                                        genDist = dist
-                                        nearestGen = obj
-                                        nearestPoint = point
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    
-                    if nearestGen and nearestPoint then
-                        if isMoving then
-                            repairEvent:FireServer(nearestPoint, false)
-                        elseif AutoGeneratorMode == "Success (Instant)" then
-                            for i = 1, 10 do
-                                repairEvent:FireServer(nearestPoint, true)
-                                skillCheckEvent:FireServer("success", 1, nearestGen, nearestPoint)
-                            end
-                        else
-                            local promptGui = PlayerGui:FindFirstChild("SkillCheckPromptGui")
-                            if promptGui and (promptGui.Enabled or (promptGui:FindFirstChild("Check") and promptGui.Check.Visible)) then
-                                if promptGui:FindFirstChild("Check") then promptGui.Check.Visible = false end
-                                promptGui.Enabled = false
-                                skillCheckEvent:FireServer("great", 1, nearestGen, nearestPoint)
-                            end
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-    task.spawn(function()
-        while task.wait(0.2) do
-            if AutoAttack and LocalPlayer.Team and LocalPlayer.Team.Name:lower():find("killer") then
-                pcall(function()
-                    local myChar = LocalPlayer.Character
-                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                    if not myRoot then return end
-                    
-                    local targetFound = false
-                    for _, p in ipairs(Players:GetPlayers()) do
-                        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                            local team = (p.Team and p.Team.Name:lower()) or ""
-                            if not team:find("killer") then
-                                local isKnocked = GetGameValue(p.Character, "Knocked")
-                                if not isKnocked then
-                                    local dist = (p.Character.HumanoidRootPart.Position - myRoot.Position).Magnitude
-                                    if dist <= AttackRange then
-                                        targetFound = true
-                                        break
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    
-                    if targetFound then
-                        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                        local attacks = remotes and remotes:FindFirstChild("Attacks")
-                        local basicAttack = attacks and attacks:FindFirstChild("BasicAttack")
-                        if basicAttack then
-                            basicAttack:FireServer(false)
                         end
                     end
                 end)
