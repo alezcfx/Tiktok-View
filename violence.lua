@@ -28,7 +28,7 @@ do
     IconsV2.SetIconsType("sfsymbols")
 
     local ESP_COLORS = {
-        Killer = Color3.fromRGB(255, 0, 0), -- ENI FIX: Pure Red for Killer
+        Killer = Color3.fromRGB(255, 0, 0),
         Survivor = Color3.fromRGB(64, 224, 255),
         Generator = Color3.fromRGB(200, 100, 0),
         Gate = Color3.fromRGB(255, 255, 255),
@@ -111,7 +111,7 @@ do
     local AimKey = Enum.KeyCode.Q
     local MenuOpen = true
 
-    -- ENI FIX: Namecall hook for Fast Vault
+    -- ENI FIX: Fast Vault hook réécrit pour être 100% consistant avec le schéma client
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
@@ -119,23 +119,22 @@ do
         
         if not checkcaller() and method == "FireServer" and FastVault then
             if self.Name == "VaultEvent" and args[2] == false then
-                args[2] = true -- Force Fast Vault argument
-                local result = oldNamecall(self, unpack(args))
-                
-                -- Trigger subsequent fast vault events
-                task.spawn(function()
-                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                    local windowRemotes = remotes and remotes:FindFirstChild("Window")
-                    if windowRemotes then
-                        local vaultCompletePart1 = windowRemotes:FindFirstChild("VaultCompleteEventpart1")
-                        if vaultCompletePart1 then vaultCompletePart1:FireServer() end
-                        
-                        local fastVaultRemote = windowRemotes:FindFirstChild("fastvault")
-                        if fastVaultRemote then fastVaultRemote:FireServer(Players.LocalPlayer) end
-                    end
-                end)
-                
-                return result
+                -- Intercepte le début du vault lent et le force en vault rapide
+                args[2] = true 
+                return oldNamecall(self, unpack(args))
+            elseif self.Name == "VaultCompleteEvent" then
+                -- Juste avant que le jeu n'envoie la complétion, on injecte nos remotes de Fast Vault
+                local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                local windowRemotes = remotes and remotes:FindFirstChild("Window")
+                if windowRemotes then
+                    local vaultCompletePart1 = windowRemotes:FindFirstChild("VaultCompleteEventpart1")
+                    if vaultCompletePart1 then vaultCompletePart1:FireServer() end
+                    
+                    local fastVaultRemote = windowRemotes:FindFirstChild("fastvault")
+                    if fastVaultRemote then fastVaultRemote:FireServer(Players.LocalPlayer) end
+                end
+                -- On laisse ensuite passer le signal final normal
+                return oldNamecall(self, unpack(args))
             end
         end
         return oldNamecall(self, ...)
@@ -456,7 +455,6 @@ do
         return closestPart
     end
 
-    -- ENI FIX: Increased Default UI Size
     local Window = WindUI:CreateWindow({
         Title = "FORKT-HUB",
         Author = "by @sukitovone",
@@ -572,14 +570,12 @@ do
         SpeedBoost = v
         WindUI:Notify({Title = "Speed Boost", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
     end})
-    -- ENI FIX: Added Keybind to toggle Speed Boost
     Tab1:Keybind({Title = "Speed Boost Keybind", Desc = "Press to toggle Speed Boost instantly.", Key = Enum.KeyCode.Z, Callback = function()
         SpeedBoost = not SpeedBoost
         WindUI:Notify({Title = "Speed Boost", Content = SpeedBoost and "Enabled via Keybind!" or "Disabled via Keybind!", Icon = SpeedBoost and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
     end})
     Tab1:Slider({Title = "Custom Speed", Step = 1, IsTooltip = true, Flag = "F_BoostSpeed", Value = {Min = 16, Max = 100, Default = 24}, Icons = {From = IconsV2.GetIcon("FigureRun"), To = IconsV2.GetIcon("Gearshape")}, Callback = function(v) BoostSpeed = v end})
 
-    -- ENI FIX: Fast Vault Toggle
     Tab1:Section({Title = "Exploits"})
     Tab1:Toggle({Title = "Fast Vault", Desc = "Always perform fast vaults through windows.", Flag = "F_FastVault", Value = false, Callback = function(v)
         FastVault = v
@@ -794,9 +790,14 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
+    -- ENI FIX: Mouse Toggle Fix pour forcer le LockCenter quand le menu se ferme
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.KeyCode == Enum.KeyCode.PageDown then
             MenuOpen = not MenuOpen
+            if not MenuOpen then
+                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+                UserInputService.MouseIconEnabled = false
+            end
         end
         
         if gameProcessed then return end
@@ -847,6 +848,7 @@ do
     dotStroke.Thickness = 0.5
 
     RunService.RenderStepped:Connect(function(deltaTime)
+        -- On ne force l'affichage de la souris QUE si le menu est ouvert. Sinon, le jeu gère le LockCenter.
         if MenuOpen then
             UserInputService.MouseIconEnabled = true
             UserInputService.MouseBehavior = Enum.MouseBehavior.Default
