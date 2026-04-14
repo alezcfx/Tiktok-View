@@ -16,7 +16,6 @@ do
         if core then TargetGui = core end
     end)
 
-    -- ENI FIX: Bulletproof SafeLoad to prevent "attempt to call a nil value" crash on Line 1
     local function SafeLoad(url)
         local success, result = pcall(function()
             local source = game:HttpGet(url)
@@ -152,7 +151,6 @@ do
         
         for _, part in ipairs(character:GetDescendants()) do
             if (part:IsA("BasePart") or part:IsA("Decal")) and part.Name ~= "HumanoidRootPart" then
-                -- Check for original transparency
                 local orig = part:GetAttribute("OrigTrans")
                 if orig == nil then
                     part:SetAttribute("OrigTrans", part.Transparency)
@@ -160,15 +158,84 @@ do
                 end
                 
                 if transparency == 0 then
-                    -- Revert to whatever it was originally (fixes the white prop bug)
                     part.Transparency = orig
                 else
-                    -- Only make things transparent if they were visible to begin with
                     if orig < 1 then
                         part.Transparency = transparency
                     end
                 end
             end
+        end
+    end
+
+    -- ENI FIX: Abstracted function so we can use it from UI Toggle AND Keybind
+    local function ToggleInvisibility(state)
+        IsInvisible = state
+        local character = Players.LocalPlayer.Character
+        if not character then return end
+
+        if IsInvisible then
+            setCharacterTransparency(0.5)
+            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+            if humanoidRootPart then
+                local savedpos = humanoidRootPart.CFrame
+                pcall(function() character:MoveTo(seatTeleportPosition) end)
+                task.wait(0.1)
+                
+                local Seat = Instance.new('Seat')
+                Seat.Parent = workspace
+                Seat.Anchored = false
+                Seat.CanCollide = false
+                Seat.Name = 'invischair'
+                Seat.Transparency = 1
+                Seat.Position = seatTeleportPosition
+                
+                local Weld = Instance.new("Weld")
+                Weld.Part0 = Seat
+                local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+                
+                if torso then
+                    Weld.Part1 = torso
+                    Weld.Parent = Seat
+                    task.wait()
+                    pcall(function() Seat.CFrame = savedpos end)
+                    currentSeatPosition = Seat.Position
+                    startSeatReturnHeartbeat()
+                    WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are now a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+                else
+                    Seat:Destroy()
+                    currentSeatPosition = nil
+                    stopSeatReturnHeartbeat()
+                    WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
+                end
+            end
+            
+            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
+            if not h then
+                h = Instance.new("Highlight")
+                h.Name = "GhostHighlight_" .. LocalPlayer.Name
+                h.Adornee = character
+                h.FillColor = Color3.fromRGB(255, 255, 255)
+                h.FillTransparency = 0.65
+                h.OutlineColor = Color3.fromRGB(200, 200, 200)
+                h.OutlineTransparency = 0.1
+                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                h.Parent = TargetGui
+            end
+        else
+            setCharacterTransparency(0)
+            stopSeatReturnHeartbeat()
+            currentSeatPosition = nil
+            
+            task.spawn(function()
+                local inv = workspace:FindFirstChild('invischair')
+                if inv then pcall(function() inv:Destroy() end) end
+            end)
+            
+            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
+            if h then h:Destroy() end
+            
+            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. You are visible.", Icon = IconsV2.GetIcon("Eye")})
         end
     end
 
@@ -200,7 +267,7 @@ do
         end)
     end
 
-    -- PERFECT GEN (GC SNIPER) EVENT HANDLER
+    -- PERFECT GEN
     task.spawn(function()
         local GeneratorRemote = ReplicatedStorage:WaitForChild("Remotes", 10)
         if GeneratorRemote then
@@ -665,11 +732,13 @@ do
         AntiKnock = v
         WindUI:Notify({Title = "Anti Knock", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("FigureStand") or IconsV2.GetIcon("FigureFall")})
     end})
+    
+    -- ENI FIX: Changed Default Keybind for Speed Boost to R
     Tab1:Toggle({Title = "Speed Boost", Desc = "Increases running speed.", Flag = "F_SpeedBoost", Value = false, Callback = function(v)
         SpeedBoost = v
         WindUI:Notify({Title = "Speed Boost", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
     end})
-    Tab1:Keybind({Title = "Speed Boost Keybind", Desc = "Press to toggle Speed Boost instantly.", Key = Enum.KeyCode.Z, Callback = function()
+    Tab1:Keybind({Title = "Speed Boost Keybind", Desc = "Press to toggle Speed Boost instantly.", Key = Enum.KeyCode.R, Callback = function()
         SpeedBoost = not SpeedBoost
         WindUI:Notify({Title = "Speed Boost", Content = SpeedBoost and "Enabled via Keybind!" or "Disabled via Keybind!", Icon = SpeedBoost and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
     end})
@@ -680,60 +749,13 @@ do
         FastVault = v
         WindUI:Notify({Title = "Fast Vault", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
     end})
+    
+    -- ENI FIX: Added Keybind for Invisible Mode, defaults to T
     Tab1:Toggle({Title = "Invisible Mode", Desc = "True Server-Sided Invisibility. You become a ghost.", Flag = "F_Invisible", Value = false, Callback = function(v)
-        IsInvisible = v
-        local character = Players.LocalPlayer.Character
-        if not character then return end
-
-        if v then
-            -- Set local transparency to 0.5 (semi-transparent)
-            setCharacterTransparency(0.5)
-            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-            if humanoidRootPart then
-                local savedpos = humanoidRootPart.CFrame
-                pcall(function() character:MoveTo(seatTeleportPosition) end)
-                task.wait(0.1)
-                
-                local Seat = Instance.new('Seat')
-                Seat.Parent = workspace
-                Seat.Anchored = false
-                Seat.CanCollide = false
-                Seat.Name = 'invischair'
-                Seat.Transparency = 1
-                Seat.Position = seatTeleportPosition
-                
-                local Weld = Instance.new("Weld")
-                Weld.Part0 = Seat
-                local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                
-                if torso then
-                    Weld.Part1 = torso
-                    Weld.Parent = Seat
-                    task.wait()
-                    pcall(function() Seat.CFrame = savedpos end)
-                    currentSeatPosition = Seat.Position
-                    startSeatReturnHeartbeat()
-                    WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are now a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
-                else
-                    Seat:Destroy()
-                    currentSeatPosition = nil
-                    stopSeatReturnHeartbeat()
-                    WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
-                end
-            end
-        else
-            -- Restore original transparency fully
-            setCharacterTransparency(0)
-            stopSeatReturnHeartbeat()
-            currentSeatPosition = nil
-            
-            task.spawn(function()
-                local inv = workspace:FindFirstChild('invischair')
-                if inv then pcall(function() inv:Destroy() end) end
-            end)
-            
-            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. You are visible.", Icon = IconsV2.GetIcon("Eye")})
-        end
+        ToggleInvisibility(v)
+    end})
+    Tab1:Keybind({Title = "Invisible Keybind", Desc = "Press to toggle Invisibility instantly.", Key = Enum.KeyCode.T, Callback = function()
+        ToggleInvisibility(not IsInvisible)
     end})
 
     Tab1:Section({Title = "Camera View"})
@@ -994,12 +1016,24 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
+    -- ENI FIX: Bruteforce CFrame translation to bypass Survivor WalkSpeed locks
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
+            local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hum and root then
+                -- On essaie d'appliquer la vitesse normalement
                 hum.WalkSpeed = BoostSpeed
                 if hum:GetAttribute("WalkSpeed") then hum:SetAttribute("WalkSpeed", BoostSpeed) end
+                
+                -- FORCE BRUTE CFRAME : Si le jeu nous bloque en dessous de la vitesse voulue, on pousse manuellement le perso.
+                if hum.MoveDirection.Magnitude > 0 then
+                    local actualSpeed = hum.WalkSpeed
+                    if actualSpeed < BoostSpeed then
+                        local speedDiff = BoostSpeed - actualSpeed
+                        root.CFrame = root.CFrame + (hum.MoveDirection * (speedDiff * deltaTime))
+                    end
+                end
             end
         end
 
