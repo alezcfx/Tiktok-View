@@ -108,6 +108,7 @@ do
     local AutoAttack = false
     local AttackRange = 10
     local PerfectGen = false
+    local PerfectHeal = false
     local WarnKiller = true
     local ActiveGenerators = {}
     local ThemeName = "Crimson"
@@ -125,7 +126,6 @@ do
     local AimDistance = 150
     local MenuOpen = true
 
-    -- SERVER DESYNC INVISIBILITY LOGIC
     local seatTeleportPosition = Vector3.new(-25.95, 400, 3537.55)
     local currentSeatPosition = nil
     local seatReturnHeartbeatConnection = nil
@@ -168,7 +168,6 @@ do
         end
     end
 
-    -- ENI FIX: Abstracted function so we can use it from UI Toggle AND Keybind
     local function ToggleInvisibility(state)
         IsInvisible = state
         local character = Players.LocalPlayer.Character
@@ -239,7 +238,6 @@ do
         end
     end
 
-    -- FAST VAULT HOOK
     local oldNamecall
     if type(hookmetamethod) == "function" then
         oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
@@ -286,6 +284,48 @@ do
                             local info = debug.getinfo(func)
                             
                             if info.source and info.source:match("Skillcheck%-gen") and info.nups == 15 then
+                                local upvals = debug.getupvalues(func)
+                                
+                                if upvals[1] == true then
+                                    debug.setupvalue(func, 2, false)
+                                    
+                                    local lineFrame = upvals[5]
+                                    local goalFrame = upvals[6]
+                                    
+                                    if lineFrame and goalFrame then
+                                        lineFrame.Rotation = goalFrame.Rotation + 109
+                                    end
+                                    
+                                    func("success")
+                                    break 
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+
+    -- PERFECT HEAL (NEW ENI FIX)
+    task.spawn(function()
+        local HealingRemote = ReplicatedStorage:WaitForChild("Remotes", 10)
+        if HealingRemote then
+            HealingRemote = HealingRemote:WaitForChild("Healing", 10)
+        end
+        local SkillCheckEventHeal = HealingRemote and HealingRemote:WaitForChild("SkillCheckEvent", 10)
+        
+        if SkillCheckEventHeal then
+            SkillCheckEventHeal.OnClientEvent:Connect(function()
+                if not PerfectHeal then return end
+                task.wait(0.2) 
+                
+                if type(getgc) == "function" then
+                    for _, func in pairs(getgc(true)) do
+                        if type(func) == "function" and islclosure(func) then
+                            local info = debug.getinfo(func)
+                            
+                            if info.source and info.source:match("Skillcheck%-player") and info.nups == 13 then
                                 local upvals = debug.getupvalues(func)
                                 
                                 if upvals[1] == true then
@@ -732,8 +772,6 @@ do
         AntiKnock = v
         WindUI:Notify({Title = "Anti Knock", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("FigureStand") or IconsV2.GetIcon("FigureFall")})
     end})
-    
-    -- ENI FIX: Changed Default Keybind for Speed Boost to R
     Tab1:Toggle({Title = "Speed Boost", Desc = "Increases running speed.", Flag = "F_SpeedBoost", Value = false, Callback = function(v)
         SpeedBoost = v
         WindUI:Notify({Title = "Speed Boost", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
@@ -749,8 +787,6 @@ do
         FastVault = v
         WindUI:Notify({Title = "Fast Vault", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
     end})
-    
-    -- ENI FIX: Added Keybind for Invisible Mode, defaults to T
     Tab1:Toggle({Title = "Invisible Mode", Desc = "True Server-Sided Invisibility. You become a ghost.", Flag = "F_Invisible", Value = false, Callback = function(v)
         ToggleInvisibility(v)
     end})
@@ -860,10 +896,17 @@ do
     Tab3:Slider({Title = "Attack Range (Studs)", Step = 1, IsTooltip = true, Flag = "F_AttackRange", Value = {Min = 5, Max = 25, Default = 10}, Callback = function(v) AttackRange = v end})
 
     Tab4:Section({Title = "Game Logic"})
-    Tab4:Toggle({Title = "Perfect Gen", Desc = "Snipe skillchecks perfectly using GC.", Flag = "F_PerfectGen", Value = false, Callback = function(v)
+    Tab4:Toggle({Title = "Perfect Gen", Desc = "Snipe gen skillchecks perfectly using GC.", Flag = "F_PerfectGen", Value = false, Callback = function(v)
         PerfectGen = v
         WindUI:Notify({Title = "Perfect Gen", Content = v and "Perfect Gen enabled!" or "Perfect Gen disabled.", Icon = v and IconsV2.GetIcon("CpuFill") or IconsV2.GetIcon("Cpu")})
     end})
+    
+    -- ENI FIX: NEW PERFECT HEAL GC SNIPER
+    Tab4:Toggle({Title = "Perfect Heal", Desc = "Snipe heal skillchecks perfectly using GC.", Flag = "F_PerfectHeal", Value = false, Callback = function(v)
+        PerfectHeal = v
+        WindUI:Notify({Title = "Perfect Heal", Content = v and "Perfect Heal enabled!" or "Perfect Heal disabled.", Icon = v and IconsV2.GetIcon("HeartFill") or IconsV2.GetIcon("HeartSlash")})
+    end})
+
     Tab4:Toggle({Title = "Instant Unhook", Desc = "Automatically free yourself instantly when hooked.", Flag = "F_AutoUnhook", Value = false, Callback = function(v)
         AutoUnhook = v
         WindUI:Notify({Title = "Auto Unhook", Content = v and "Active! You will drop from the Hook instantly." or "Disabled.", Icon = v and IconsV2.GetIcon("LinkSlash") or IconsV2.GetIcon("Link")})
@@ -1016,17 +1059,14 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
-    -- ENI FIX: Bruteforce CFrame translation to bypass Survivor WalkSpeed locks
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
             local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if hum and root then
-                -- On essaie d'appliquer la vitesse normalement
                 hum.WalkSpeed = BoostSpeed
                 if hum:GetAttribute("WalkSpeed") then hum:SetAttribute("WalkSpeed", BoostSpeed) end
                 
-                -- FORCE BRUTE CFRAME : Si le jeu nous bloque en dessous de la vitesse voulue, on pousse manuellement le perso.
                 if hum.MoveDirection.Magnitude > 0 then
                     local actualSpeed = hum.WalkSpeed
                     if actualSpeed < BoostSpeed then
