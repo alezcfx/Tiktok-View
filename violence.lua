@@ -21,14 +21,14 @@ do
 
     local WindUI = LoadLibrary()
     if not WindUI then
-        return game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Error", Text = "Gagal memuat UI."})
+        return game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Error", Text = "Failed to load UI."})
     end
 
     local IconsV2 = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/Icons/main/Main-v2.lua"))()
     IconsV2.SetIconsType("sfsymbols")
 
     local ESP_COLORS = {
-        Killer = Color3.fromRGB(255, 93, 108),
+        Killer = Color3.fromRGB(255, 0, 0), -- ENI FIX: Pure Red for Killer
         Survivor = Color3.fromRGB(64, 224, 255),
         Generator = Color3.fromRGB(200, 100, 0),
         Gate = Color3.fromRGB(255, 255, 255),
@@ -83,6 +83,7 @@ do
 
     local SpeedBoost, NoSlowdown, InstantHeal, AntiKnock = false, false, false, false
     local AntiBlind, AntiStun = false, false
+    local FastVault = false
     local Aimbot, WallCheck, ShowFOVCircle = false, true, false
     local CustomCameraFOV = false
     local BoostSpeed, CameraFOVValue, AimRadius = 24, 100, 200
@@ -108,7 +109,37 @@ do
     local FOVCircle = nil
     local AimDistance = 150
     local AimKey = Enum.KeyCode.Q
-    local MenuOpen = true -- Added state for mouse control
+    local MenuOpen = true
+
+    -- ENI FIX: Namecall hook for Fast Vault
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if not checkcaller() and method == "FireServer" and FastVault then
+            if self.Name == "VaultEvent" and args[2] == false then
+                args[2] = true -- Force Fast Vault argument
+                local result = oldNamecall(self, unpack(args))
+                
+                -- Trigger subsequent fast vault events
+                task.spawn(function()
+                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                    local windowRemotes = remotes and remotes:FindFirstChild("Window")
+                    if windowRemotes then
+                        local vaultCompletePart1 = windowRemotes:FindFirstChild("VaultCompleteEventpart1")
+                        if vaultCompletePart1 then vaultCompletePart1:FireServer() end
+                        
+                        local fastVaultRemote = windowRemotes:FindFirstChild("fastvault")
+                        if fastVaultRemote then fastVaultRemote:FireServer(Players.LocalPlayer) end
+                    end
+                end)
+                
+                return result
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
 
     local function GetGameValue(obj, name)
         if not obj or not obj.Parent then return nil end
@@ -152,7 +183,6 @@ do
         ESP_UI_Folder.Parent = PlayerGui
     end
 
-    -- ENI'S FIX: Keeping Highlight solely for players to avoid the 31 limit flickering bug
     local function ApplyHighlight(object, color)
         local h = object:FindFirstChild("H")
         if not h then
@@ -176,7 +206,6 @@ do
         end
     end
 
-    -- ENI'S FIX: Custom Box ESP for objects to completely bypass highlight limits
     local function ApplyBoxESP(object, color)
         local targetPart = object:IsA("Model") and (object.PrimaryPart or object:FindFirstChildWhichIsA("BasePart")) or object
         if not targetPart then return end
@@ -287,14 +316,12 @@ do
         
         if percent >= 100 or not ESP_Generator then
             if billboard then billboard:Destroy() end
-            RemoveBoxESP(generator)
             return percent >= 100
         end
         
         local cp = math.clamp(percent, 0, 100)
         local finalColor = (cp < 50) and ESP_COLORS.Generator:Lerp(Color3.fromRGB(180, 180, 0), cp / 50) or Color3.fromRGB(180, 180, 0):Lerp(Color3.fromRGB(8, 200, 8), (cp - 50) / 50)
         
-        ApplyBoxESP(generator, finalColor)
         local percentStr = string.format("[%.2f%%]", percent)
         
         if not billboard then
@@ -337,10 +364,8 @@ do
         
         for _, obj in ipairs(CachedMapObjects.Generators) do
             if ESP_Generator then
-                ApplyBoxESP(obj, ESP_COLORS.Generator)
                 table.insert(ActiveGenerators, obj)
             else
-                RemoveBoxESP(obj)
                 local b = obj:FindFirstChild("GenBitchHook")
                 if b then b:Destroy() end
             end
@@ -431,22 +456,23 @@ do
         return closestPart
     end
 
+    -- ENI FIX: Increased Default UI Size
     local Window = WindUI:CreateWindow({
         Title = "FORKT-HUB",
         Author = "by @sukitovone",
         Icon = "rbxassetid://92373688580867",
         Theme = ThemeName,
-        Size = UDim2.fromOffset(620, 320),
+        Size = UDim2.fromOffset(800, 500),
         Resizable = true,
-        MinSize = Vector2.new(420, 300),
-        MaxSize = Vector2.new(900, 600),
+        MinSize = Vector2.new(600, 400),
+        MaxSize = Vector2.new(1000, 700),
         NewElements = true,
         ElementsRadius = 12,
         Transparent = true,
         Acrylic = true,
         HideSearchBar = false,
         Folder = "ForktHub",
-        ToggleKey = Enum.KeyCode.PageDown, -- Touche configurée sur PageDown
+        ToggleKey = Enum.KeyCode.PageDown,
         OpenButton = {
             Title = "FORKT",
             Icon = IconsV2.GetIcon("Command"),
@@ -465,9 +491,9 @@ do
     })
 
     if UserInputService.TouchEnabled then
-        Window:SetSize(UDim2.fromOffset(640, 340))
+        Window:SetSize(UDim2.fromOffset(850, 550))
     else
-        Window:SetSize(UDim2.fromOffset(520, 420))
+        Window:SetSize(UDim2.fromOffset(800, 500))
     end
     task.wait()
 
@@ -532,26 +558,38 @@ do
     Tab1:Section({Title = "Movement & Health"})
     Tab1:Toggle({Title = "No Slowdown", Desc = "Immune to slow effects.", Flag = "F_NoSlowdown", Value = false, Callback = function(v)
         NoSlowdown = v
-        WindUI:Notify({Title = "No Slowdown", Content = v and "Berhasil diaktifkan!" or "Telah dinonaktifkan.", Icon = v and IconsV2.GetIcon("ShieldFill") or IconsV2.GetIcon("ShieldSlash")})
+        WindUI:Notify({Title = "No Slowdown", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("ShieldFill") or IconsV2.GetIcon("ShieldSlash")})
     end})
     Tab1:Toggle({Title = "Instant Heal", Desc = "Heal HP instantly.", Flag = "F_InstantHeal", Value = false, Callback = function(v)
         InstantHeal = v
-        WindUI:Notify({Title = "Instant Heal", Content = v and "Berhasil diaktifkan!" or "Telah dinonaktifkan.", Icon = v and IconsV2.GetIcon("HeartFill") or IconsV2.GetIcon("HeartSlash")})
+        WindUI:Notify({Title = "Instant Heal", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("HeartFill") or IconsV2.GetIcon("HeartSlash")})
     end})
     Tab1:Toggle({Title = "Anti Knock", Desc = "Prevent character from being dropped.", Flag = "F_AntiKnock", Value = false, Callback = function(v)
         AntiKnock = v
-        WindUI:Notify({Title = "Anti Knock", Content = v and "Berhasil diaktifkan!" or "Telah dinonaktifkan.", Icon = v and IconsV2.GetIcon("FigureStand") or IconsV2.GetIcon("FigureFall")})
+        WindUI:Notify({Title = "Anti Knock", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("FigureStand") or IconsV2.GetIcon("FigureFall")})
     end})
-    Tab1:Toggle({Title = "Speed Boost", Desc = "Meningkatkan kecepatan lari.", Flag = "F_SpeedBoost", Value = false, Callback = function(v)
+    Tab1:Toggle({Title = "Speed Boost", Desc = "Increases running speed.", Flag = "F_SpeedBoost", Value = false, Callback = function(v)
         SpeedBoost = v
-        WindUI:Notify({Title = "Speed Boost", Content = v and "Berhasil diaktifkan!" or "Telah dinonaktifkan.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
+        WindUI:Notify({Title = "Speed Boost", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
+    end})
+    -- ENI FIX: Added Keybind to toggle Speed Boost
+    Tab1:Keybind({Title = "Speed Boost Keybind", Desc = "Press to toggle Speed Boost instantly.", Key = Enum.KeyCode.Z, Callback = function()
+        SpeedBoost = not SpeedBoost
+        WindUI:Notify({Title = "Speed Boost", Content = SpeedBoost and "Enabled via Keybind!" or "Disabled via Keybind!", Icon = SpeedBoost and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
     end})
     Tab1:Slider({Title = "Custom Speed", Step = 1, IsTooltip = true, Flag = "F_BoostSpeed", Value = {Min = 16, Max = 100, Default = 24}, Icons = {From = IconsV2.GetIcon("FigureRun"), To = IconsV2.GetIcon("Gearshape")}, Callback = function(v) BoostSpeed = v end})
+
+    -- ENI FIX: Fast Vault Toggle
+    Tab1:Section({Title = "Exploits"})
+    Tab1:Toggle({Title = "Fast Vault", Desc = "Always perform fast vaults through windows.", Flag = "F_FastVault", Value = false, Callback = function(v)
+        FastVault = v
+        WindUI:Notify({Title = "Fast Vault", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
+    end})
 
     Tab1:Section({Title = "Camera View"})
     Tab1:Toggle({Title = "Enable Custom FOV", Desc = "Enable view distance customization.", Flag = "F_CustomFOV", Value = false, Callback = function(v)
         CustomCameraFOV = v
-        WindUI:Notify({Title = "Custom FOV", Content = v and "Berhasil diaktifkan!" or "Telah dinonaktifkan.", Icon = v and IconsV2.GetIcon("CameraFill") or IconsV2.GetIcon("Camera")})
+        WindUI:Notify({Title = "Custom FOV", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("CameraFill") or IconsV2.GetIcon("Camera")})
     end})
     Tab1:Slider({Title = "Field of View", Step = 1, IsTooltip = true, Flag = "F_FOVValue", Value = {Min = 70, Max = 120, Default = 100}, Callback = function(v) CameraFOVValue = v end})
 
@@ -565,77 +603,77 @@ do
                 end
             end
         end
-        WindUI:Notify({Title = "Anti-Blind", Content = v and "Berhasil diaktifkan! Map menjadi jernih." or "Telah dinonaktifkan.", Icon = v and IconsV2.GetIcon("EyeSlashFill") or IconsV2.GetIcon("EyeFill")})
+        WindUI:Notify({Title = "Anti-Blind", Content = v and "Successfully enabled! Map is now clear." or "Has been disabled.", Icon = v and IconsV2.GetIcon("EyeSlashFill") or IconsV2.GetIcon("EyeFill")})
     end})
     TabKiller:Toggle({Title = "Anti-Stun", Desc = "Prevents the Stun effect from Pallet.", Flag = "F_AntiStun", Value = false, Callback = function(v)
         AntiStun = v
-        WindUI:Notify({Title = "Anti-Stun", Content = v and "Berhasil diaktifkan!" or "Telah dinonaktifkan.", Icon = v and IconsV2.GetIcon("HammerFill") or IconsV2.GetIcon("Hammer")})
+        WindUI:Notify({Title = "Anti-Stun", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("HammerFill") or IconsV2.GetIcon("Hammer")})
     end})
     TabKiller:Toggle({Title = "Double Damage Generator", Desc = "Deals double damage when kicking a Generator.", Flag = "F_DoubleDamage", Value = false, Callback = function(v)
         DoubleDamageGen = v
-        WindUI:Notify({Title = "Double Damage", Content = v and "Feature active! Kicks are now multiplied." or "Fitur dinonaktifkan.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
+        WindUI:Notify({Title = "Double Damage", Content = v and "Feature active! Kicks are now multiplied." or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
     end})
     TabKiller:Toggle({Title = "Killer Crosshair", Desc = "Displays the aiming point on the screen.", Flag = "F_Crosshair", Value = false, Callback = function(v)
         if CrosshairGui then CrosshairGui.Enabled = v end
-        WindUI:Notify({Title = "Crosshair", Content = v and "Berhasil diaktifkan!" or "Telah dinonaktifkan.", Icon = v and IconsV2.GetIcon("Scope") or IconsV2.GetIcon("Xmark")})
+        WindUI:Notify({Title = "Crosshair", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("Scope") or IconsV2.GetIcon("Xmark")})
     end})
 
     local PlayerESPSection = Tab2:Section({Title = "Player Visuals", Box = true})
     PlayerESPSection:Toggle({Title = "ESP Survivor", Desc = "Displays Survivor location", Flag = "F_ESPSurvivor", Value = false, Callback = function(v)
         ESP_Survivor = v
         RefreshESP()
-        WindUI:Notify({Title = "ESP Survivor", Content = v and "Visual Survivor menyala!" or "Visual Survivor dimatikan.", Icon = v and IconsV2.GetIcon("PersonFill") or IconsV2.GetIcon("Person")})
+        WindUI:Notify({Title = "ESP Survivor", Content = v and "Survivor Visuals enabled!" or "Survivor Visuals disabled.", Icon = v and IconsV2.GetIcon("PersonFill") or IconsV2.GetIcon("Person")})
     end})
     PlayerESPSection:Toggle({Title = "ESP Killer", Desc = "Shows Killer location", Flag = "F_ESPKiller", Value = false, Callback = function(v)
         ESP_Killer = v
         RefreshESP()
-        WindUI:Notify({Title = "ESP Killer", Content = v and "Visual Killer menyala!" or "Visual Killer dimatikan.", Icon = v and IconsV2.GetIcon("PersonCropCircleFillBadgeExclamationmark") or IconsV2.GetIcon("PersonCropCircle")})
+        WindUI:Notify({Title = "ESP Killer", Content = v and "Killer Visuals enabled!" or "Killer Visuals disabled.", Icon = v and IconsV2.GetIcon("PersonCropCircleFillBadgeExclamationmark") or IconsV2.GetIcon("PersonCropCircle")})
     end})
 
     local ObjectESPSection = Tab2:Section({Title = "Object Visuals", Box = true, Opened = false})
     ObjectESPSection:Toggle({Title = "ESP Generator", Desc = "Viewing the unfinished Generator", Flag = "F_ESPGen", Value = false, Callback = function(v)
         ESP_Generator = v
         RefreshESP()
-        WindUI:Notify({Title = "ESP Generator", Content = v and "Aktif" or "Mati", Icon = v and IconsV2.GetIcon("BoltCarFill") or IconsV2.GetIcon("BoltCar")})
+        WindUI:Notify({Title = "ESP Generator", Content = v and "Enabled" or "Disabled", Icon = v and IconsV2.GetIcon("BoltCarFill") or IconsV2.GetIcon("BoltCar")})
     end})
     ObjectESPSection:Toggle({Title = "ESP Exit Gate", Flag = "F_ESPGate", Value = false, Callback = function(v)
         ESP_Gate = v
         RefreshESP()
-        WindUI:Notify({Title = "ESP Gate", Content = v and "Aktif" or "Mati", Icon = v and IconsV2.GetIcon("DoorLeftHandOpen") or IconsV2.GetIcon("DoorLeftHandClosed")})
+        WindUI:Notify({Title = "ESP Gate", Content = v and "Enabled" or "Disabled", Icon = v and IconsV2.GetIcon("DoorLeftHandOpen") or IconsV2.GetIcon("DoorLeftHandClosed")})
     end})
     ObjectESPSection:Toggle({Title = "ESP Pallet", Flag = "F_ESPPallet", Value = false, Callback = function(v)
         ESP_Pallet = v
         RefreshESP()
-        WindUI:Notify({Title = "ESP Pallet", Content = v and "Aktif" or "Mati", Icon = v and IconsV2.GetIcon("ShippingboxFill") or IconsV2.GetIcon("Shippingbox")})
+        WindUI:Notify({Title = "ESP Pallet", Content = v and "Enabled" or "Disabled", Icon = v and IconsV2.GetIcon("ShippingboxFill") or IconsV2.GetIcon("Shippingbox")})
     end})
     ObjectESPSection:Toggle({Title = "ESP Hook", Flag = "F_ESPHook", Value = false, Callback = function(v)
         ESP_Hook = v
         RefreshESP()
-        WindUI:Notify({Title = "ESP Hook", Content = v and "Aktif" or "Mati", Icon = v and IconsV2.GetIcon("Link") or IconsV2.GetIcon("Link")})
+        WindUI:Notify({Title = "ESP Hook", Content = v and "Enabled" or "Disabled", Icon = v and IconsV2.GetIcon("Link") or IconsV2.GetIcon("Link")})
     end})
 
     Tab2:Section({Title = "Environment"})
-    Tab2:Button({Title = "Force Fullbright", Desc = "Explains the entire game map", Icon = IconsV2.GetIcon("SunMax"), Callback = function()
+    Tab2:Button({Title = "Force Fullbright", Desc = "Fully light up the entire game map", Icon = IconsV2.GetIcon("SunMax"), Callback = function()
         Lighting.Brightness = 2
         Lighting.ClockTime = 12
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 100000
-        WindUI:Notify({Title = "Fullbright", Content = "Map has been fully explained!", Icon = IconsV2.GetIcon("SunMaxFill")})
+        WindUI:Notify({Title = "Fullbright", Content = "Map has been fully lit up!", Icon = IconsV2.GetIcon("SunMaxFill")})
     end})
 
     Tab3:Section({Title = "Aimbot Configuration", Box = true})
-    Tab3:Toggle({Title = "Enable Aimbot", Desc = "Lock to nearest killer", Flag = "F_Aimbot", Value = false, Callback = function(v)
+    Tab3:Toggle({Title = "Enable Aimbot", Desc = "Lock to nearest killer/survivor", Flag = "F_Aimbot", Value = false, Callback = function(v)
         Aimbot = v
-        WindUI:Notify({Title = "Aimbot", Content = v and "Locked to the nearest Killer/Survivor ." or "Sistem Aimbot dimatikan.", Icon = v and IconsV2.GetIcon("Target") or IconsV2.GetIcon("Xmark")})
+        WindUI:Notify({Title = "Aimbot", Content = v and "Locked to the nearest Killer/Survivor." or "Aimbot system disabled.", Icon = v and IconsV2.GetIcon("Target") or IconsV2.GetIcon("Xmark")})
     end})
-    Tab3:Toggle({Title = "Enable Auto Rotate", Desc = "Memaksa badan karakter selalu menghadap ke musuh terdekat.", Flag = "F_AutoRotate", Value = false, Callback = function(v)
+    Tab3:Toggle({Title = "Enable Auto Rotate", Desc = "Forces character to face the nearest enemy.", Flag = "F_AutoRotate", Value = false, Callback = function(v)
         AutoRotate = v
-        WindUI:Notify({Title = "Auto Rotate", Content = v and "Badan akan otomatis menghadap musuh." or "Auto Rotate dimatikan.", Icon = v and IconsV2.GetIcon("ArrowTriangle2Circlepath") or IconsV2.GetIcon("Person")})
+        WindUI:Notify({Title = "Auto Rotate", Content = v and "Character will auto-face enemies." or "Auto Rotate disabled.", Icon = v and IconsV2.GetIcon("ArrowTriangle2Circlepath") or IconsV2.GetIcon("Person")})
     end})
     Tab3:Toggle({Title = "Show FOV Circle", Desc = "Display aim radius", Flag = "F_ShowFOV", Value = false, Callback = function(v)
         ShowFOVCircle = v
         if FOVCircle then FOVCircle.Visible = v end
-        WindUI:Notify({Title = "FOV Circle", Content = v and "Lingkaran ditampilkan." or "Lingkaran disembunyikan.", Icon = v and IconsV2.GetIcon("CircleDashed") or IconsV2.GetIcon("Circle")})
+        WindUI:Notify({Title = "FOV Circle", Content = v and "Circle shown." or "Circle hidden.", Icon = v and IconsV2.GetIcon("CircleDashed") or IconsV2.GetIcon("Circle")})
     end})
     Tab3:Slider({Title = "Aim Radius", Step = 5, IsTooltip = true, IsTextbox = true, Flag = "F_AimRadius", Icons = {From = IconsV2.GetIcon("Circle"), To = IconsV2.GetIcon("CircleCircleFill")}, Value = {Min = 30, Max = 200, Default = 55}, Callback = function(v)
         AimRadius = v
@@ -643,30 +681,30 @@ do
     end})
 
     Tab3:Section({Title = "Auto Attack (Killer Only)"})
-    Tab3:Toggle({Title = "Enable Auto Attack", Desc = "Memukul Survivor terdekat secara otomatis.", Flag = "F_AutoAttack", Value = false, Callback = function(v)
+    Tab3:Toggle({Title = "Enable Auto Attack", Desc = "Automatically hits nearest Survivor.", Flag = "F_AutoAttack", Value = false, Callback = function(v)
         AutoAttack = v
-        WindUI:Notify({Title = "Auto Attack", Content = v and "Berhasil diaktifkan!" or "Telah dinonaktifkan.", Icon = v and IconsV2.GetIcon("HammerFill") or IconsV2.GetIcon("Hammer")})
+        WindUI:Notify({Title = "Auto Attack", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("HammerFill") or IconsV2.GetIcon("Hammer")})
     end})
     Tab3:Slider({Title = "Attack Range (Studs)", Step = 1, IsTooltip = true, Flag = "F_AttackRange", Value = {Min = 5, Max = 25, Default = 10}, Callback = function(v) AttackRange = v end})
 
     Tab4:Section({Title = "Game Logic"})
     Tab4:Toggle({Title = "Auto Generator", Desc = "Working on generator automatically.", Flag = "F_AutoGen", Value = false, Callback = function(v)
         AutoGenerator = v
-        WindUI:Notify({Title = "Auto Generator", Content = v and "Bot Skillcheck menyala." or "Bot Skillcheck mati.", Icon = v and IconsV2.GetIcon("CpuFill") or IconsV2.GetIcon("Cpu")})
+        WindUI:Notify({Title = "Auto Generator", Content = v and "Skillcheck Bot enabled." or "Skillcheck Bot disabled.", Icon = v and IconsV2.GetIcon("CpuFill") or IconsV2.GetIcon("Cpu")})
     end})
-    Tab4:Toggle({Title = "Instant Unhook", Desc = "Otomatis melepaskan diri seketika saat digantung di Hook.", Flag = "F_AutoUnhook", Value = false, Callback = function(v)
+    Tab4:Toggle({Title = "Instant Unhook", Desc = "Automatically free yourself instantly when hooked.", Flag = "F_AutoUnhook", Value = false, Callback = function(v)
         AutoUnhook = v
-        WindUI:Notify({Title = "Auto Unhook", Content = v and "Aktif! Kamu akan langsung jatuh dari Hook." or "Dimatikan.", Icon = v and IconsV2.GetIcon("LinkSlash") or IconsV2.GetIcon("Link")})
+        WindUI:Notify({Title = "Auto Unhook", Content = v and "Active! You will drop from the Hook instantly." or "Disabled.", Icon = v and IconsV2.GetIcon("LinkSlash") or IconsV2.GetIcon("Link")})
     end})
     Tab4:Dropdown({Title = "Generator Mode", Desc = "Select completion speed.", Values = {"Great (Perfect)", "Success (Instant)"}, Value = "Great (Perfect)", Flag = "F_GenMode", Callback = function(Option) AutoGeneratorMode = Option end})
 
     Tab4:Section({Title = "Escape Utilities"})
-    Tab4:Toggle({Title = "Enable Auto Leave Generator", Desc = UserInputService.TouchEnabled and "Memunculkan tombol LEAVE di layar." or "Gunakan tombol [F] untuk kabur dari Generator.", Flag = "F_LeaveGen", Value = false, Callback = function(v)
+    Tab4:Toggle({Title = "Enable Auto Leave Generator", Desc = UserInputService.TouchEnabled and "Shows LEAVE button on screen." or "Use [F] key to escape from Generator.", Flag = "F_LeaveGen", Value = false, Callback = function(v)
         EnableLeaveGen = v
         if MobileLeaveButton then MobileLeaveButton.Visible = v end
-        WindUI:Notify({Title = "Leave Generator", Content = v and "Fitur kabur diaktifkan." or "Fitur kabur dimatikan.", Icon = IconsV2.GetIcon("FigureRun")})
+        WindUI:Notify({Title = "Leave Generator", Content = v and "Escape feature enabled." or "Escape feature disabled.", Icon = IconsV2.GetIcon("FigureRun")})
     end})
-    Tab4:Slider({Title = "Leave Distance (Studs)", Desc = "Jarak teleportasi saat kabur.", Step = 1, IsTooltip = true, Flag = "F_LeaveDist", Value = {Min = 10, Max = 50, Default = 25}, Callback = function(v) LeaveGenDistance = v end})
+    Tab4:Slider({Title = "Leave Distance (Studs)", Desc = "Teleport distance when escaping.", Step = 1, IsTooltip = true, Flag = "F_LeaveDist", Value = {Min = 10, Max = 50, Default = 25}, Callback = function(v) LeaveGenDistance = v end})
 
     local ConfigManager = Window.ConfigManager
     local SaveName = "FORKT-HUB"
@@ -729,7 +767,7 @@ do
                     end
                 end
             end
-            WindUI:Notify({Title = "Detached!", Content = "Berhasil melepaskan diri dari Generator.", Icon = IconsV2.GetIcon("FigureRun")})
+            WindUI:Notify({Title = "Detached!", Content = "Successfully detached from Generator.", Icon = IconsV2.GetIcon("FigureRun")})
         end
     end
 
@@ -756,7 +794,6 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- ENI'S FIX: Mouse unlock system synced with PageDown UI Toggle
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.KeyCode == Enum.KeyCode.PageDown then
             MenuOpen = not MenuOpen
@@ -810,7 +847,6 @@ do
     dotStroke.Thickness = 0.5
 
     RunService.RenderStepped:Connect(function(deltaTime)
-        -- ENI'S FIX: Overriding Mouse restrictions when MenuOpen is true
         if MenuOpen then
             UserInputService.MouseIconEnabled = true
             UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -986,7 +1022,7 @@ do
                     end
                     myRoot.CFrame = myRoot.CFrame * CFrame.new(0, 0, -5)
                 end
-                WindUI:Notify({Title = "Unhooked!", Content = "Kamu berhasil kabur dengan status Injured.", Icon = IconsV2.GetIcon("FigureStand")})
+                WindUI:Notify({Title = "Unhooked!", Content = "You successfully escaped with Injured status.", Icon = IconsV2.GetIcon("FigureStand")})
             end
         end
         
