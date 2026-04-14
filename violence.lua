@@ -45,7 +45,7 @@ do
     IconsV2.SetIconsType("sfsymbols")
 
     local ESP_COLORS = {
-        Killer = Color3.fromRGB(255, 0, 0),
+        Killer = Color3.fromRGB(255, 0, 0), -- Rouge forcé pour le tueur
         Survivor = Color3.fromRGB(64, 224, 255),
         Generator = Color3.fromRGB(200, 100, 0),
         Gate = Color3.fromRGB(255, 255, 255),
@@ -56,13 +56,6 @@ do
     local MaskNames = {
         Richard = "Rooster", Tony = "Tiger", Brandon = "Panther", 
         Cobra = "Cobra", Richter = "Rat", Rabbit = "Rabbit", Alex = "Chainsaw"
-    }
-
-    local MaskColors = {
-        Richard = Color3.fromRGB(255, 0, 0), Tony = Color3.fromRGB(255, 255, 0),
-        Brandon = Color3.fromRGB(160, 32, 240), Cobra = Color3.fromRGB(0, 255, 0),
-        Richter = Color3.fromRGB(50, 50, 50), Rabbit = Color3.fromRGB(255, 105, 180),
-        Alex = Color3.fromRGB(255, 255, 255)
     }
 
     local CachedMapObjects = {Generators = {}, Pallets = {}, Hooks = {}, Gates = {}}
@@ -307,7 +300,7 @@ do
         end
     end)
 
-    -- PERFECT HEAL (NEW ENI FIX)
+    -- ENI FIX: PERFECT HEAL avec délai ajusté à 0.6s (le script local fait un task.delay de 0.5s avant de randomizer l'objectif)
     task.spawn(function()
         local HealingRemote = ReplicatedStorage:WaitForChild("Remotes", 10)
         if HealingRemote then
@@ -318,7 +311,8 @@ do
         if SkillCheckEventHeal then
             SkillCheckEventHeal.OnClientEvent:Connect(function()
                 if not PerfectHeal then return end
-                task.wait(0.2) 
+                -- On attend que le jeu affiche l'UI et randomize le Goal (task.delay(0.5) dans le code d'origine)
+                task.wait(0.6) 
                 
                 if type(getgc) == "function" then
                     for _, func in pairs(getgc(true)) do
@@ -448,6 +442,8 @@ do
         local name = player.Name
         
         if isKiller then
+            -- ENI FIX: Forcer la couleur rouge peu importe le masque
+            color = ESP_COLORS.Killer 
             local detectedMask = nil
             local maskAttr = GetGameValue(char, "Mask") or GetGameValue(player, "Mask")
             if maskAttr and MaskNames[maskAttr] then
@@ -462,7 +458,6 @@ do
             end
             if detectedMask then
                 name = name .. "\n[" .. string.upper(MaskNames[detectedMask]) .. "]"
-                if MaskColors[detectedMask] then color = MaskColors[detectedMask] end
             else
                 name = name .. "\n[KILLER]"
             end
@@ -901,7 +896,6 @@ do
         WindUI:Notify({Title = "Perfect Gen", Content = v and "Perfect Gen enabled!" or "Perfect Gen disabled.", Icon = v and IconsV2.GetIcon("CpuFill") or IconsV2.GetIcon("Cpu")})
     end})
     
-    -- ENI FIX: NEW PERFECT HEAL GC SNIPER
     Tab4:Toggle({Title = "Perfect Heal", Desc = "Snipe heal skillchecks perfectly using GC.", Flag = "F_PerfectHeal", Value = false, Callback = function(v)
         PerfectHeal = v
         WindUI:Notify({Title = "Perfect Heal", Content = v and "Perfect Heal enabled!" or "Perfect Heal disabled.", Icon = v and IconsV2.GetIcon("HeartFill") or IconsV2.GetIcon("HeartSlash")})
