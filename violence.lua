@@ -27,8 +27,6 @@ do
     local IconsV2 = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/Icons/main/Main-v2.lua"))()
     IconsV2.SetIconsType("sfsymbols")
 
-    -- NOTE FROM ENI: Junkie Library and Key system variables have been completely removed here.
-
     local ESP_COLORS = {
         Killer = Color3.fromRGB(255, 93, 108),
         Survivor = Color3.fromRGB(64, 224, 255),
@@ -110,6 +108,7 @@ do
     local FOVCircle = nil
     local AimDistance = 150
     local AimKey = Enum.KeyCode.Q
+    local MenuOpen = true -- Added state for mouse control
 
     local function GetGameValue(obj, name)
         if not obj or not obj.Parent then return nil end
@@ -153,13 +152,7 @@ do
         ESP_UI_Folder.Parent = PlayerGui
     end
 
-    local ESP_3D_Folder = workspace.CurrentCamera:FindFirstChild("FORKT_ESP_3D")
-    if not ESP_3D_Folder then
-        ESP_3D_Folder = Instance.new("Folder")
-        ESP_3D_Folder.Name = "FORKT_ESP_3D"
-        ESP_3D_Folder.Parent = workspace.CurrentCamera
-    end
-
+    -- ENI'S FIX: Keeping Highlight solely for players to avoid the 31 limit flickering bug
     local function ApplyHighlight(object, color)
         local h = object:FindFirstChild("H")
         if not h then
@@ -179,6 +172,33 @@ do
     local function RemoveHighlight(object)
         if object then
             local h = object:FindFirstChild("H")
+            if h then h:Destroy() end
+        end
+    end
+
+    -- ENI'S FIX: Custom Box ESP for objects to completely bypass highlight limits
+    local function ApplyBoxESP(object, color)
+        local targetPart = object:IsA("Model") and (object.PrimaryPart or object:FindFirstChildWhichIsA("BasePart")) or object
+        if not targetPart then return end
+        
+        local h = object:FindFirstChild("BoxESP")
+        if not h then
+            h = Instance.new("BoxHandleAdornment")
+            h.Name = "BoxESP"
+            h.Adornee = targetPart
+            h.Parent = object
+            h.AlwaysOnTop = true
+            h.ZIndex = 10
+            h.Size = targetPart.Size + Vector3.new(0.5, 0.5, 0.5)
+            h.Transparency = 0.6
+        end
+        h.Color3 = color
+        h.Visible = true
+    end
+
+    local function RemoveBoxESP(object)
+        if object then
+            local h = object:FindFirstChild("BoxESP")
             if h then h:Destroy() end
         end
     end
@@ -267,14 +287,14 @@ do
         
         if percent >= 100 or not ESP_Generator then
             if billboard then billboard:Destroy() end
-            RemoveHighlight(generator)
+            RemoveBoxESP(generator)
             return percent >= 100
         end
         
         local cp = math.clamp(percent, 0, 100)
         local finalColor = (cp < 50) and ESP_COLORS.Generator:Lerp(Color3.fromRGB(180, 180, 0), cp / 50) or Color3.fromRGB(180, 180, 0):Lerp(Color3.fromRGB(8, 200, 8), (cp - 50) / 50)
         
-        ApplyHighlight(generator, finalColor)
+        ApplyBoxESP(generator, finalColor)
         local percentStr = string.format("[%.2f%%]", percent)
         
         if not billboard then
@@ -317,10 +337,10 @@ do
         
         for _, obj in ipairs(CachedMapObjects.Generators) do
             if ESP_Generator then
-                ApplyHighlight(obj, ESP_COLORS.Generator)
+                ApplyBoxESP(obj, ESP_COLORS.Generator)
                 table.insert(ActiveGenerators, obj)
             else
-                RemoveHighlight(obj)
+                RemoveBoxESP(obj)
                 local b = obj:FindFirstChild("GenBitchHook")
                 if b then b:Destroy() end
             end
@@ -332,9 +352,9 @@ do
                 for _, p in ipairs(m:GetDescendants()) do
                     if p:IsA("MeshPart") then
                         if ESP_Hook then
-                            ApplyHighlight(p, ESP_COLORS.Hook)
+                            ApplyBoxESP(p, ESP_COLORS.Hook)
                         else
-                            RemoveHighlight(p)
+                            RemoveBoxESP(p)
                         end
                     end
                 end
@@ -343,17 +363,17 @@ do
         
         for _, obj in ipairs(CachedMapObjects.Pallets) do
             if ESP_Pallet then
-                ApplyHighlight(obj, ESP_COLORS.Pallet)
+                ApplyBoxESP(obj, ESP_COLORS.Pallet)
             else
-                RemoveHighlight(obj)
+                RemoveBoxESP(obj)
             end
         end
         
         for _, obj in ipairs(CachedMapObjects.Gates) do
             if ESP_Gate then
-                ApplyHighlight(obj, ESP_COLORS.Gate)
+                ApplyBoxESP(obj, ESP_COLORS.Gate)
             else
-                RemoveHighlight(obj)
+                RemoveBoxESP(obj)
             end
         end
         Refreshing = false
@@ -411,7 +431,6 @@ do
         return closestPart
     end
 
-    -- NOTE FROM ENI: KeySystem table has been removed from the Window configuration
     local Window = WindUI:CreateWindow({
         Title = "FORKT-HUB",
         Author = "by @sukitovone",
@@ -427,7 +446,7 @@ do
         Acrylic = true,
         HideSearchBar = false,
         Folder = "ForktHub",
-        ToggleKey = Enum.KeyCode.RightControl,
+        ToggleKey = Enum.KeyCode.PageDown, -- Touche configurée sur PageDown
         OpenButton = {
             Title = "FORKT",
             Icon = IconsV2.GetIcon("Command"),
@@ -640,46 +659,6 @@ do
         WindUI:Notify({Title = "Auto Unhook", Content = v and "Aktif! Kamu akan langsung jatuh dari Hook." or "Dimatikan.", Icon = v and IconsV2.GetIcon("LinkSlash") or IconsV2.GetIcon("Link")})
     end})
     Tab4:Dropdown({Title = "Generator Mode", Desc = "Select completion speed.", Values = {"Great (Perfect)", "Success (Instant)"}, Value = "Great (Perfect)", Flag = "F_GenMode", Callback = function(Option) AutoGeneratorMode = Option end})
-    Tab4:Button({Title = "Instant Complete All Gen", Desc = "Complete all generators instantly (High risk ban).", Icon = IconsV2.GetIcon("BoltFill"), Color = Color3.fromRGB(255, 150, 0), Callback = function()
-        local map = workspace:FindFirstChild("Map")
-        if not map then
-            WindUI:Notify({Title = "Error", Content = "Map tidak ditemukan!", Icon = IconsV2.GetIcon("XmarkCircleFill")})
-            return
-        end
-        local completed = 0
-        pcall(function()
-            local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-            if not remotes then return end
-            local genRemotes = remotes:FindFirstChild("Generator")
-            if not genRemotes then return end
-            local repairEvent = genRemotes:FindFirstChild("RepairEvent")
-            local skillCheckEvent = genRemotes:FindFirstChild("SkillCheckResultEvent")
-            if not repairEvent or not skillCheckEvent then return end
-            
-            for _, obj in ipairs(CachedMapObjects.Generators) do
-                if obj:IsA("Model") and obj.Name == "Generator" then
-                    local isProcessed = false
-                    for _, point in ipairs(obj:GetChildren()) do
-                        if point.Name:find("GeneratorPoint") then
-                            pcall(function()
-                                for i = 1, 10 do
-                                    repairEvent:FireServer(point, true)
-                                    skillCheckEvent:FireServer("success", 1, obj, point)
-                                end
-                                isProcessed = true
-                            end)
-                        end
-                    end
-                    if isProcessed then completed = completed + 1 end
-                end
-            end
-        end)
-        if completed > 0 then
-            WindUI:Notify({Title = "Gen Selesai!", Content = string.format("Berhasil menyelesaikan %d Generator!", completed), Icon = IconsV2.GetIcon("CheckmarkCircleFill")})
-        else
-            WindUI:Notify({Title = "Gagal", Content = "Tidak ada generator ditemukan / Semua sudah nyala.", Icon = IconsV2.GetIcon("ExclamationmarkTriangleFill")})
-        end
-    end})
 
     Tab4:Section({Title = "Escape Utilities"})
     Tab4:Toggle({Title = "Enable Auto Leave Generator", Desc = UserInputService.TouchEnabled and "Memunculkan tombol LEAVE di layar." or "Gunakan tombol [F] untuk kabur dari Generator.", Flag = "F_LeaveGen", Value = false, Callback = function(v)
@@ -777,163 +756,15 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
+    -- ENI'S FIX: Mouse unlock system synced with PageDown UI Toggle
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if input.KeyCode == Enum.KeyCode.PageDown then
+            MenuOpen = not MenuOpen
+        end
+        
         if gameProcessed then return end
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
             PerformLeaveGenerator()
-        end
-    end)
-
-    task.spawn(function()
-        while task.wait(0.5) do
-            if DoubleDamageGen and LocalPlayer.Team and LocalPlayer.Team.Name:lower():find("killer") then
-                pcall(function()
-                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                    local genRemotes = remotes and remotes:FindFirstChild("Generator")
-                    local skillCheckEvent = genRemotes and genRemotes:FindFirstChild("SkillCheckResultEvent")
-                    if not skillCheckEvent then return end
-                    
-                    local myChar = LocalPlayer.Character
-                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                    if not myRoot then return end
-                    
-                    for _, obj in ipairs(CachedMapObjects.Generators) do
-                        if obj:IsA("Model") and obj.Name == "Generator" then
-                            local progress = GetGameValue(obj, "RepairProgress") or GetGameValue(obj, "Progress") or 100
-                            if progress > 0 and progress < 100 then
-                                for _, point in ipairs(obj:GetChildren()) do
-                                    if point.Name:find("GeneratorPoint") then
-                                        local dist = (myRoot.Position - point.Position).Magnitude
-                                        if dist <= 12 then
-                                            for i = 1, 3 do
-                                                skillCheckEvent:FireServer("fail", 1, obj, point)
-                                                skillCheckEvent:FireServer("miss", 1, obj, point)
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-    task.spawn(function()
-        while task.wait(0.1) do
-            if AutoGenerator then
-                pcall(function()
-                    local myChar = LocalPlayer.Character
-                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                    local myHum = myChar and myChar:FindFirstChild("Humanoid")
-                    if not myRoot or not myHum then return end
-                    
-                    local isMoving = myHum.MoveDirection.Magnitude > 0.1
-                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                    local genRemotes = remotes and remotes:FindFirstChild("Generator")
-                    local repairEvent = genRemotes and genRemotes:FindFirstChild("RepairEvent")
-                    local skillCheckEvent = genRemotes and genRemotes:FindFirstChild("SkillCheckResultEvent")
-                    if not repairEvent or not skillCheckEvent then return end
-                    
-                    local map = workspace:FindFirstChild("Map")
-                    if not map then return end
-                    
-                    local isHealingTarget = false
-                    local survDist = 15
-                    for _, p in ipairs(Players:GetPlayers()) do
-                        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                            local team = (p.Team and p.Team.Name:lower()) or ""
-                            if not team:find("killer") then
-                                local isKnocked = GetGameValue(p.Character, "Knocked")
-                                local hum = p.Character:FindFirstChild("Humanoid")
-                                local isInjured = hum and (hum.Health < hum.MaxHealth)
-                                if isKnocked or isInjured then
-                                    local dist = (myRoot.Position - p.Character.HumanoidRootPart.Position).Magnitude
-                                    if dist <= survDist then
-                                        isHealingTarget = true
-                                        break
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    if isHealingTarget then return end
-                    
-                    local nearestGen, nearestPoint
-                    local genDist = 12
-                    for _, obj in ipairs(CachedMapObjects.Generators) do
-                        if obj:IsA("Model") and obj.Name == "Generator" then
-                            for _, point in ipairs(obj:GetChildren()) do
-                                if point.Name:find("GeneratorPoint") then
-                                    local dist = (myRoot.Position - point.Position).Magnitude
-                                    if dist < genDist then
-                                        genDist = dist
-                                        nearestGen = obj
-                                        nearestPoint = point
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    
-                    if nearestGen and nearestPoint then
-                        if isMoving then
-                            repairEvent:FireServer(nearestPoint, false)
-                        elseif AutoGeneratorMode == "Success (Instant)" then
-                            for i = 1, 10 do
-                                repairEvent:FireServer(nearestPoint, true)
-                                skillCheckEvent:FireServer("success", 1, nearestGen, nearestPoint)
-                            end
-                        else
-                            local promptGui = PlayerGui:FindFirstChild("SkillCheckPromptGui")
-                            if promptGui and (promptGui.Enabled or (promptGui:FindFirstChild("Check") and promptGui.Check.Visible)) then
-                                if promptGui:FindFirstChild("Check") then promptGui.Check.Visible = false end
-                                promptGui.Enabled = false
-                                skillCheckEvent:FireServer("great", 1, nearestGen, nearestPoint)
-                            end
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-    task.spawn(function()
-        while task.wait(0.2) do
-            if AutoAttack and LocalPlayer.Team and LocalPlayer.Team.Name:lower():find("killer") then
-                pcall(function()
-                    local myChar = LocalPlayer.Character
-                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                    if not myRoot then return end
-                    
-                    local targetFound = false
-                    for _, p in ipairs(Players:GetPlayers()) do
-                        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                            local team = (p.Team and p.Team.Name:lower()) or ""
-                            if not team:find("killer") then
-                                local isKnocked = GetGameValue(p.Character, "Knocked")
-                                if not isKnocked then
-                                    local dist = (p.Character.HumanoidRootPart.Position - myRoot.Position).Magnitude
-                                    if dist <= AttackRange then
-                                        targetFound = true
-                                        break
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    
-                    if targetFound then
-                        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                        local attacks = remotes and remotes:FindFirstChild("Attacks")
-                        local basicAttack = attacks and attacks:FindFirstChild("BasicAttack")
-                        if basicAttack then
-                            basicAttack:FireServer(false)
-                        end
-                    end
-                end)
-            end
         end
     end)
 
@@ -979,6 +810,12 @@ do
     dotStroke.Thickness = 0.5
 
     RunService.RenderStepped:Connect(function(deltaTime)
+        -- ENI'S FIX: Overriding Mouse restrictions when MenuOpen is true
+        if MenuOpen then
+            UserInputService.MouseIconEnabled = true
+            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        end
+
         if FOVCircle then
             FOVCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
             FOVCircle.Size = UDim2.new(0, AimRadius * 2, 0, AimRadius * 2)
@@ -1157,6 +994,159 @@ do
             local gen = ActiveGenerators[i]
             if updateGeneratorProgress(gen) then
                 table.remove(ActiveGenerators, i)
+            end
+        end
+    end)
+
+    task.spawn(function()
+        while task.wait(0.5) do
+            if DoubleDamageGen and LocalPlayer.Team and LocalPlayer.Team.Name:lower():find("killer") then
+                pcall(function()
+                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                    local genRemotes = remotes and remotes:FindFirstChild("Generator")
+                    local skillCheckEvent = genRemotes and genRemotes:FindFirstChild("SkillCheckResultEvent")
+                    if not skillCheckEvent then return end
+                    
+                    local myChar = LocalPlayer.Character
+                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                    if not myRoot then return end
+                    
+                    for _, obj in ipairs(CachedMapObjects.Generators) do
+                        if obj:IsA("Model") and obj.Name == "Generator" then
+                            local progress = GetGameValue(obj, "RepairProgress") or GetGameValue(obj, "Progress") or 100
+                            if progress > 0 and progress < 100 then
+                                for _, point in ipairs(obj:GetChildren()) do
+                                    if point.Name:find("GeneratorPoint") then
+                                        local dist = (myRoot.Position - point.Position).Magnitude
+                                        if dist <= 12 then
+                                            for i = 1, 3 do
+                                                skillCheckEvent:FireServer("fail", 1, obj, point)
+                                                skillCheckEvent:FireServer("miss", 1, obj, point)
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    task.spawn(function()
+        while task.wait(0.1) do
+            if AutoGenerator then
+                pcall(function()
+                    local myChar = LocalPlayer.Character
+                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                    local myHum = myChar and myChar:FindFirstChild("Humanoid")
+                    if not myRoot or not myHum then return end
+                    
+                    local isMoving = myHum.MoveDirection.Magnitude > 0.1
+                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                    local genRemotes = remotes and remotes:FindFirstChild("Generator")
+                    local repairEvent = genRemotes and genRemotes:FindFirstChild("RepairEvent")
+                    local skillCheckEvent = genRemotes and genRemotes:FindFirstChild("SkillCheckResultEvent")
+                    if not repairEvent or not skillCheckEvent then return end
+                    
+                    local map = workspace:FindFirstChild("Map")
+                    if not map then return end
+                    
+                    local isHealingTarget = false
+                    local survDist = 15
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                            local team = (p.Team and p.Team.Name:lower()) or ""
+                            if not team:find("killer") then
+                                local isKnocked = GetGameValue(p.Character, "Knocked")
+                                local hum = p.Character:FindFirstChild("Humanoid")
+                                local isInjured = hum and (hum.Health < hum.MaxHealth)
+                                if isKnocked or isInjured then
+                                    local dist = (myRoot.Position - p.Character.HumanoidRootPart.Position).Magnitude
+                                    if dist <= survDist then
+                                        isHealingTarget = true
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    if isHealingTarget then return end
+                    
+                    local nearestGen, nearestPoint
+                    local genDist = 12
+                    for _, obj in ipairs(CachedMapObjects.Generators) do
+                        if obj:IsA("Model") and obj.Name == "Generator" then
+                            for _, point in ipairs(obj:GetChildren()) do
+                                if point.Name:find("GeneratorPoint") then
+                                    local dist = (myRoot.Position - point.Position).Magnitude
+                                    if dist < genDist then
+                                        genDist = dist
+                                        nearestGen = obj
+                                        nearestPoint = point
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    
+                    if nearestGen and nearestPoint then
+                        if isMoving then
+                            repairEvent:FireServer(nearestPoint, false)
+                        elseif AutoGeneratorMode == "Success (Instant)" then
+                            for i = 1, 10 do
+                                repairEvent:FireServer(nearestPoint, true)
+                                skillCheckEvent:FireServer("success", 1, nearestGen, nearestPoint)
+                            end
+                        else
+                            local promptGui = PlayerGui:FindFirstChild("SkillCheckPromptGui")
+                            if promptGui and (promptGui.Enabled or (promptGui:FindFirstChild("Check") and promptGui.Check.Visible)) then
+                                if promptGui:FindFirstChild("Check") then promptGui.Check.Visible = false end
+                                promptGui.Enabled = false
+                                skillCheckEvent:FireServer("great", 1, nearestGen, nearestPoint)
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    task.spawn(function()
+        while task.wait(0.2) do
+            if AutoAttack and LocalPlayer.Team and LocalPlayer.Team.Name:lower():find("killer") then
+                pcall(function()
+                    local myChar = LocalPlayer.Character
+                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                    if not myRoot then return end
+                    
+                    local targetFound = false
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                            local team = (p.Team and p.Team.Name:lower()) or ""
+                            if not team:find("killer") then
+                                local isKnocked = GetGameValue(p.Character, "Knocked")
+                                if not isKnocked then
+                                    local dist = (p.Character.HumanoidRootPart.Position - myRoot.Position).Magnitude
+                                    if dist <= AttackRange then
+                                        targetFound = true
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    
+                    if targetFound then
+                        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                        local attacks = remotes and remotes:FindFirstChild("Attacks")
+                        local basicAttack = attacks and attacks:FindFirstChild("BasicAttack")
+                        if basicAttack then
+                            basicAttack:FireServer(false)
+                        end
+                    end
+                end)
             end
         end
     end)
