@@ -12,6 +12,8 @@ do
     local LocalPlayer = Players.LocalPlayer
     local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+    local TargetGui = (pcall(function() return cloneref(game:GetService("CoreGui")) end) and game:GetService("CoreGui")) or PlayerGui
+
     local function LoadLibrary()
         local success, result = pcall(function()
             return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
@@ -111,7 +113,6 @@ do
     local AimKey = Enum.KeyCode.Q
     local MenuOpen = true
 
-    -- FAST VAULT HOOK
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
@@ -137,7 +138,6 @@ do
         return oldNamecall(self, ...)
     end)
 
-    -- PERFECT GEN (GC SNIPER) EVENT HANDLER
     task.spawn(function()
         local GeneratorRemote = ReplicatedStorage:WaitForChild("Remotes", 10)
         if GeneratorRemote then
@@ -440,7 +440,7 @@ do
         Refreshing = false
     end
 
-    local function IsVisible(targetPart)
+    local function IsVisibleTarget(targetPart)
         if not WallCheck then return true end
         local origin = workspace.CurrentCamera.CFrame.Position
         local direction = targetPart.Position - origin
@@ -477,7 +477,7 @@ do
                 
                 local distance3D = (targetPart.Position - camera.CFrame.Position).Magnitude
                 if distance3D > AimDistance then continue end
-                if not IsVisible(targetPart) then continue end
+                if not IsVisibleTarget(targetPart) then continue end
                 
                 local pos, visible = camera:WorldToViewportPoint(targetPart.Position)
                 if visible then
@@ -619,35 +619,22 @@ do
         IsInvisible = v
         WindUI:Notify({Title = "Invisible Mode", Content = v and "You are now a ghost." or "Invisibility disabled.", Icon = v and IconsV2.GetIcon("EyeSlashFill") or IconsV2.GetIcon("Eye")})
         
-        local char = LocalPlayer.Character
-        if char then
-            if not v then
-                -- Restaure la vraie transparence des objets originaux
+        -- ENI FIX: Nettoyage et restauration stricte à la désactivation
+        if not v then
+            local char = LocalPlayer.Character
+            if char then
                 for _, part in ipairs(char:GetDescendants()) do
                     if (part:IsA("BasePart") or part:IsA("Decal")) and part.Name ~= "HumanoidRootPart" then
-                        local orig = part:GetAttribute("OrigTrans")
-                        if orig then
-                            part.Transparency = orig
+                        local saved = part:GetAttribute("SavedTrans")
+                        if saved ~= nil then
+                            part.Transparency = saved
+                            part:SetAttribute("SavedTrans", nil) -- On nettoie la sauvegarde
                         end
                     end
                 end
-                -- Supprime l'effet fantôme local
-                local h = char:FindFirstChild("GhostHighlight")
-                if h then h:Destroy() end
-            else
-                -- Crée l'effet fantôme local
-                local h = char:FindFirstChild("GhostHighlight")
-                if not h then
-                    h = Instance.new("Highlight")
-                    h.Name = "GhostHighlight"
-                    h.FillColor = Color3.fromRGB(255, 255, 255)
-                    h.OutlineColor = Color3.fromRGB(200, 200, 200)
-                    h.FillTransparency = 0.5
-                    h.OutlineTransparency = 0.5
-                    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                    h.Parent = char
-                end
             end
+            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
+            if h then h:Destroy() end
         end
     end})
 
@@ -869,7 +856,6 @@ do
         end
     end)
 
-    local TargetGui = (pcall(function() return cloneref(game:GetService("CoreGui")) end) and game:GetService("CoreGui")) or PlayerGui
     local IndicatorGui = TargetGui:FindFirstChild("FORKT_Indicator") or Instance.new("ScreenGui")
     IndicatorGui.Name = "FORKT_Indicator"
     IndicatorGui.IgnoreGuiInset = true
@@ -910,7 +896,16 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
+    -- ENI FIX: Force WalkSpeed explicitly right before rendering so the game can't override it (crucial for Survivor)
     RunService.RenderStepped:Connect(function(deltaTime)
+        if SpeedBoost and LocalPlayer.Character then
+            local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.WalkSpeed = BoostSpeed
+                if hum:GetAttribute("WalkSpeed") then hum:SetAttribute("WalkSpeed", BoostSpeed) end
+            end
+        end
+
         if MenuOpen then
             UserInputService.MouseIconEnabled = true
             UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -960,19 +955,31 @@ do
         local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
         local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
         
-        -- INVISIBLE LOOP
+        -- ENI FIX: Invisible Loop with strict `nil` check to perfectly save/restore states
         if IsInvisible and myChar then
             for _, part in ipairs(myChar:GetDescendants()) do
                 if (part:IsA("BasePart") or part:IsA("Decal")) and part.Name ~= "HumanoidRootPart" then
-                    -- Sauvegarde de la transparence originelle pour éviter le bug du "tuyau blanc"
-                    if not part:GetAttribute("OrigTrans") then
-                        part:SetAttribute("OrigTrans", part.Transparency)
+                    if part:GetAttribute("SavedTrans") == nil then
+                        part:SetAttribute("SavedTrans", part.Transparency)
                     end
-                    -- Force l'invisibilité serveur
                     if part.Transparency ~= 1 then
                         part.Transparency = 1
                     end
                 end
+            end
+            
+            -- Ghost Highlight inside TargetGui to bypass character invisibility masking
+            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
+            if not h then
+                h = Instance.new("Highlight")
+                h.Name = "GhostHighlight_" .. LocalPlayer.Name
+                h.Adornee = myChar
+                h.FillColor = Color3.fromRGB(255, 255, 255)
+                h.FillTransparency = 0.65
+                h.OutlineColor = Color3.fromRGB(200, 200, 200)
+                h.OutlineTransparency = 0.1
+                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                h.Parent = TargetGui
             end
         end
 
