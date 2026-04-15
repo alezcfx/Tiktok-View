@@ -116,12 +116,11 @@ do
     local LastUpdateTick, LastESPRefresh = 0, 0
     local FOVCircle = nil
     local AimDistance = 150
-    local MenuOpen = true
     
     local UIToggleKey = Enum.KeyCode.PageDown
 
     -- SERVER DESYNC INVISIBILITY VARIABLES
-    local seatTeleportPosition = Vector3.new(-25.95, 400, 3537.55)
+    local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
     local currentSeatPosition = nil
     local seatReturnHeartbeatConnection = nil
 
@@ -169,30 +168,28 @@ do
         if not character then return end
 
         local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-        local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+        local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso") or character:FindFirstChild("LowerTorso")
         local camera = workspace.CurrentCamera
 
         if IsInvisible then
             setCharacterTransparency(0.5)
             
             if humanoidRootPart and torso then
+                -- LO'S FIX: On verrouille la caméra sur le Torso avant la téléportation
+                camera.CameraSubject = torso
+
                 local savedpos = humanoidRootPart.CFrame
-                local savedCamCFrame = camera.CFrame
-                
-                -- ENI FIX: Figer la caméra via Scriptable pour qu'elle ne suive pas le saut
-                camera.CameraType = Enum.CameraType.Scriptable
-                camera.CFrame = savedCamCFrame
-                
-                pcall(function() character:MoveTo(seatTeleportPosition) end)
+                pcall(function() character:MoveTo(seatTeleportPosition.Position) end)
                 task.wait(0.1)
                 
+                -- LE VRAI SERVER DESYNC (Cache des autres joueurs)
                 local Seat = Instance.new('Seat')
                 Seat.Parent = workspace
                 Seat.Anchored = false
                 Seat.CanCollide = false
                 Seat.Name = 'invischair'
                 Seat.Transparency = 1
-                Seat.Position = seatTeleportPosition
+                Seat.CFrame = seatTeleportPosition
                 
                 local Weld = Instance.new("Weld")
                 Weld.Part0 = Seat
@@ -204,14 +201,9 @@ do
                 currentSeatPosition = Seat.Position
                 startSeatReturnHeartbeat()
                 
-                -- Restituer la caméra
-                camera.CameraType = Enum.CameraType.Custom
-                local hum = character:FindFirstChildOfClass("Humanoid")
-                if hum then camera.CameraSubject = hum end
-                
-                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are hidden from others.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
-                WindUI:Notify({Title = "Error", Content = "Invisibility failed.", Icon = IconsV2.GetIcon("Xmark")})
+                WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
             end
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
@@ -231,9 +223,9 @@ do
             stopSeatReturnHeartbeat()
             currentSeatPosition = nil
             
+            -- On rend la caméra au Humanoid
             local hum = character:FindFirstChildOfClass("Humanoid")
             if hum then
-                camera.CameraType = Enum.CameraType.Custom
                 camera.CameraSubject = hum
             end
             
@@ -915,7 +907,6 @@ do
     TabSettings:Dropdown({Title = "Select Theme", Flag = "F_Theme", Value = ThemeName, Values = Themes, Callback = function(v) WindUI:SetTheme(v) end})
     TabSettings:Toggle({Title = "Window Transparency", Flag = "F_Trans", Value = Window.Transparent, Callback = function(v) Window:ToggleTransparency(v) end})
     
-    -- LO'S FIX : Conversion propre string/Enum et méthode officielle Window:SetToggleKey()
     TabSettings:Keybind({
         Title = "UI Toggle Key",
         Desc = "Change the key used to hide/show the menu.",
@@ -994,19 +985,19 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- LO'S FIX : gameProcessed protégé en haut, et on laisse WindUI gérer sa souris !
+    -- ENI FIX: Contrôle direct et intelligent de l'inversion de la souris (gameProcessed sécurisé en haut)
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if not UserInputService:GetFocusedTextBox() then
-            if input.KeyCode == UIToggleKey then 
-                MenuOpen = not MenuOpen
-                if not MenuOpen then
-                    UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-                    UserInputService.MouseIconEnabled = false
-                end
+        if gameProcessed then return end 
+        
+        if input.KeyCode == UIToggleKey then 
+            if UserInputService.MouseIconEnabled then
+                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+                UserInputService.MouseIconEnabled = false
+            else
+                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                UserInputService.MouseIconEnabled = true
             end
         end
-        
-        if gameProcessed then return end 
         
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
             PerformLeaveGenerator()
@@ -1053,7 +1044,6 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
-    -- LO'S FIX : Fini la boucle RenderStepped qui bloque la souris !
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -1070,11 +1060,6 @@ do
                     end
                 end
             end
-        end
-
-        if MenuOpen then
-            UserInputService.MouseIconEnabled = true
-            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
         end
 
         if FOVCircle then
