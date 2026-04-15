@@ -93,7 +93,6 @@ do
 
     local SpeedBoost, wasSpeedBoostActive, NoSlowdown, InstantHeal, AntiKnock = false, false, false, false, false
     local AntiBlind, AntiStun = false, false
-    local FastVault = false
     local IsInvisible = false
     local Aimbot, WallCheck, ShowFOVCircle = false, true, false
     local CustomCameraFOV = false
@@ -170,7 +169,12 @@ do
         if IsInvisible then
             setCharacterTransparency(0.5)
             local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-            if humanoidRootPart then
+            local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+            
+            if humanoidRootPart and torso then
+                -- LO'S BRILLIANT FIX: Figer la caméra sur le Torso pour éviter le bond
+                workspace.CurrentCamera.CameraSubject = torso
+
                 local savedpos = humanoidRootPart.CFrame
                 pcall(function() character:MoveTo(seatTeleportPosition) end)
                 task.wait(0.1)
@@ -185,22 +189,15 @@ do
                 
                 local Weld = Instance.new("Weld")
                 Weld.Part0 = Seat
-                local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                
-                if torso then
-                    Weld.Part1 = torso
-                    Weld.Parent = Seat
-                    task.wait()
-                    pcall(function() Seat.CFrame = savedpos end)
-                    currentSeatPosition = Seat.Position
-                    startSeatReturnHeartbeat()
-                    WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are now a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
-                else
-                    Seat:Destroy()
-                    currentSeatPosition = nil
-                    stopSeatReturnHeartbeat()
-                    WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
-                end
+                Weld.Part1 = torso
+                Weld.Parent = Seat
+                task.wait()
+                pcall(function() Seat.CFrame = savedpos end)
+                currentSeatPosition = Seat.Position
+                startSeatReturnHeartbeat()
+                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are now a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+            else
+                WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
             end
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
@@ -220,6 +217,12 @@ do
             stopSeatReturnHeartbeat()
             currentSeatPosition = nil
             
+            -- FIX: Rendre le contrôle de la caméra au Humanoid
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                workspace.CurrentCamera.CameraSubject = humanoid
+            end
+            
             task.spawn(function()
                 local inv = workspace:FindFirstChild('invischair')
                 if inv then pcall(function() inv:Destroy() end) end
@@ -230,34 +233,6 @@ do
             
             WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. You are visible.", Icon = IconsV2.GetIcon("Eye")})
         end
-    end
-
-    -- FAST VAULT HOOK
-    local oldNamecall
-    if type(hookmetamethod) == "function" then
-        oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-            local method = getnamecallmethod()
-            local args = {...}
-            
-            if not checkcaller() and method == "FireServer" and FastVault then
-                if self.Name == "VaultEvent" and args[2] == false then
-                    args[2] = true 
-                    return oldNamecall(self, unpack(args))
-                elseif self.Name == "VaultCompleteEvent" then
-                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                    local windowRemotes = remotes and remotes:FindFirstChild("Window")
-                    if windowRemotes then
-                        local vaultCompletePart1 = windowRemotes:FindFirstChild("VaultCompleteEventpart1")
-                        if vaultCompletePart1 then vaultCompletePart1:FireServer() end
-                        
-                        local fastVaultRemote = windowRemotes:FindFirstChild("fastvault")
-                        if fastVaultRemote then fastVaultRemote:FireServer(Players.LocalPlayer) end
-                    end
-                    return oldNamecall(self, unpack(args))
-                end
-            end
-            return oldNamecall(self, ...)
-        end)
     end
 
     -- PERFECT GEN
@@ -302,7 +277,7 @@ do
         end
     end)
 
-    -- PERFECT HEAL (ENI FIX: Filtre chirurgical sur la 13ème variable)
+    -- PERFECT HEAL
     task.spawn(function()
         local HealingRemote = ReplicatedStorage:WaitForChild("Remotes", 10)
         if HealingRemote then
@@ -323,7 +298,6 @@ do
                             if info.source and info.source:match("Skillcheck%-player") and info.nups == 13 then
                                 local upvals = debug.getupvalues(func)
                                 
-                                -- LE FILTRE DE LO: Vérifie que la 13ème variable est le son de confirmation
                                 if typeof(upvals[13]) == "Instance" and upvals[13]:IsA("Sound") then
                                     if upvals[1] == true then
                                         debug.setupvalue(func, 2, false)
@@ -663,7 +637,7 @@ do
     end
 
     local Window = WindUI:CreateWindow({
-        Title = "ALZ-HUB",
+        Title = "FORKT-HUB",
         Author = "by alz",
         Icon = "rbxassetid://92373688580867",
         Theme = ThemeName,
@@ -676,10 +650,10 @@ do
         Transparent = true,
         Acrylic = true,
         HideSearchBar = false,
-        Folder = "ALZHUB",
+        Folder = "ForktHub",
         ToggleKey = Enum.KeyCode.PageDown,
         OpenButton = {
-            Title = "ALZ-HUB",
+            Title = "FORKT",
             Icon = IconsV2.GetIcon("Command"),
             CornerRadius = UDim.new(0, 14),
             Draggable = true,
@@ -781,10 +755,6 @@ do
     Tab1:Slider({Title = "Custom Speed", Step = 1, IsTooltip = true, Flag = "F_BoostSpeed", Value = {Min = 16, Max = 100, Default = 24}, Icons = {From = IconsV2.GetIcon("FigureRun"), To = IconsV2.GetIcon("Gearshape")}, Callback = function(v) BoostSpeed = v end})
 
     Tab1:Section({Title = "Exploits"})
-    Tab1:Toggle({Title = "Fast Vault", Desc = "Always perform fast vaults through windows.", Flag = "F_FastVault", Value = false, Callback = function(v)
-        FastVault = v
-        WindUI:Notify({Title = "Fast Vault", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
-    end})
     Tab1:Toggle({Title = "Invisible Mode", Desc = "True Server-Sided Invisibility. You become a ghost.", Flag = "F_Invisible", Value = false, Callback = function(v)
         ToggleInvisibility(v)
     end})
@@ -918,7 +888,7 @@ do
     Tab4:Slider({Title = "Leave Distance (Studs)", Desc = "Teleport distance when escaping.", Step = 1, IsTooltip = true, Flag = "F_LeaveDist", Value = {Min = 10, Max = 50, Default = 25}, Callback = function(v) LeaveGenDistance = v end})
 
     local ConfigManager = Window.ConfigManager
-    local SaveName = "ALZ-HUB"
+    local SaveName = "FORKT-HUB"
     local Themes = {}
     for name, _ in pairs(WindUI.Themes) do table.insert(Themes, name) end
     
@@ -939,9 +909,9 @@ do
     TabSettings:Section({Title = "Window Configuration"})
     TabSettings:Dropdown({Title = "Select Theme", Flag = "F_Theme", Value = ThemeName, Values = Themes, Callback = function(v) WindUI:SetTheme(v) end})
     TabSettings:Toggle({Title = "Window Transparency", Flag = "F_Trans", Value = Window.Transparent, Callback = function(v) Window:ToggleTransparency(v) end})
-    TabSettings:Button({Title = "Unload ALZ-HUB", Desc = "Removes UI and turns off all features instantly", Icon = IconsV2.GetIcon("TrashFill"), Color = Color3.fromRGB(255, 60, 60), Justify = "Center", Callback = function()
+    TabSettings:Button({Title = "Unload FORKT-HUB", Desc = "Removes UI and turns off all features instantly", Icon = IconsV2.GetIcon("TrashFill"), Color = Color3.fromRGB(255, 60, 60), Justify = "Center", Callback = function()
         Window:Destroy()
-        WindUI:Notify({Title = "Unloaded", Content = "ALZ-HUB was successfully shut down safely.", Icon = IconsV2.GetIcon("CheckmarkShieldFill")})
+        WindUI:Notify({Title = "Unloaded", Content = "FORKT-HUB was successfully shut down safely.", Icon = IconsV2.GetIcon("CheckmarkShieldFill")})
     end})
 
     TabSettings:Section({Title = "Credits & Information"})
@@ -1291,5 +1261,5 @@ do
         end)
     end)
 
-    WindUI:Notify({Title = "ALZ-HUB", Content = "Script successfully loaded! (Clean Version)", Duration = 3, Icon = IconsV2.GetIcon("CheckmarkCircle")})
+    WindUI:Notify({Title = "FORKT-HUB", Content = "Script successfully loaded! (Clean Version)", Duration = 3, Icon = IconsV2.GetIcon("CheckmarkCircle")})
 end
