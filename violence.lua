@@ -147,71 +147,56 @@ do
         end
     end
 
-    local function ToggleInvisibility(state)
-        IsInvisible = state
-        local character = Players.LocalPlayer.Character
-        if not character then return end
+local function ToggleInvisibility(state)
+    IsInvisible = state
+    local character = Players.LocalPlayer.Character
+    if not character then return end
 
-        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-        local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso") or character:FindFirstChild("LowerTorso")
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
 
-        if IsInvisible then
-            setCharacterTransparency(0.5)
+    if IsInvisible then
+        setCharacterTransparency(0.5)
+        
+        if humanoidRootPart and torso then
+            -- 1. Il sauvegarde la position où le joueur se trouve
+            local savedpos = humanoidRootPart.CFrame
             
-            if humanoidRootPart and torso then
-                workspace.CurrentCamera.CameraSubject = torso
-
-                local motor = humanoidRootPart:FindFirstChild("RootJoint") or torso:FindFirstChild("RootJoint") or torso:FindFirstChild("Root")
-                if motor and motor:IsA("Motor6D") then
-                    SavedRootJoint = motor:Clone()
-                    SavedRootParent = motor.Parent
-                    motor:Destroy() 
-                end
-                
-                humanoidRootPart.CFrame = seatTeleportPosition
-                
-                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. Screen stable.", Icon = IconsV2.GetIcon("EyeSlashFill")})
-            else
-                WindUI:Notify({Title = "Error", Content = "Invisibility failed.", Icon = IconsV2.GetIcon("Xmark")})
-            end
+            -- 2. Il envoie TOUT le corps dans le ciel (Caméra qui saute ici !)
+            pcall(function() character:MoveTo(seatTeleportPosition) end)
             
-            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
-            if not h then
-                h = Instance.new("Highlight")
-                h.Name = "GhostHighlight_" .. LocalPlayer.Name
-                h.Adornee = character
-                h.FillColor = Color3.fromRGB(255, 255, 255)
-                h.FillTransparency = 0.65
-                h.OutlineColor = Color3.fromRGB(200, 200, 200)
-                h.OutlineTransparency = 0.1
-                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                h.Parent = TargetGui
-            end
-        else
-            setCharacterTransparency(0)
+            -- 3. Le fameux délai qui donne la nausée
+            task.wait(0.1)
             
-            if humanoidRootPart and torso then
-                humanoidRootPart.CFrame = torso.CFrame
-                
-                if SavedRootJoint and SavedRootParent then
-                    local restoredMotor = SavedRootJoint:Clone()
-                    restoredMotor.Parent = SavedRootParent
-                    SavedRootJoint = nil
-                    SavedRootParent = nil
-                end
-
-                if humanoid then
-                    workspace.CurrentCamera.CameraSubject = humanoid
-                end
-            end
+            -- 4. Il crée sa chaise magique et soude le corps dessus pour le redescendre
+            local Seat = Instance.new('Seat')
+            Seat.Parent = workspace
+            Seat.Anchored = false
+            Seat.CanCollide = false
+            Seat.Name = 'invischair'
+            Seat.Transparency = 1
+            Seat.Position = seatTeleportPosition
             
-            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
-            if h then h:Destroy() end
+            local Weld = Instance.new("Weld")
+            Weld.Part0 = Seat
+            Weld.Part1 = torso
+            Weld.Parent = Seat
             
-            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. Camera restored.", Icon = IconsV2.GetIcon("Eye")})
+            -- 5. Il ramène la chaise au sol. Le corps redescend avec, et le joueur peut marcher !
+            task.wait()
+            pcall(function() Seat.CFrame = savedpos end)
+            
+            WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are a ghost."})
         end
+    else
+        -- Code pour se rendre visible (Détruire la chaise et remettre la transparence à 0)
+        setCharacterTransparency(0)
+        task.spawn(function()
+            local inv = workspace:FindFirstChild('invischair')
+            if inv then pcall(function() inv:Destroy() end) end
+        end)
     end
+end
 
     -- PERFECT GEN
     task.spawn(function()
