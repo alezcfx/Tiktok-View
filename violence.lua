@@ -45,7 +45,7 @@ do
     IconsV2.SetIconsType("sfsymbols")
 
     local ESP_COLORS = {
-        Killer = Color3.fromRGB(255, 0, 0), -- Rouge forcé pour le tueur
+        Killer = Color3.fromRGB(255, 0, 0),
         Survivor = Color3.fromRGB(64, 224, 255),
         Generator = Color3.fromRGB(200, 100, 0),
         Gate = Color3.fromRGB(255, 255, 255),
@@ -119,6 +119,7 @@ do
     local AimDistance = 150
     local MenuOpen = true
 
+    -- SERVER DESYNC INVISIBILITY LOGIC
     local seatTeleportPosition = Vector3.new(-25.95, 400, 3537.55)
     local currentSeatPosition = nil
     local seatReturnHeartbeatConnection = nil
@@ -231,6 +232,7 @@ do
         end
     end
 
+    -- FAST VAULT HOOK
     local oldNamecall
     if type(hookmetamethod) == "function" then
         oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
@@ -300,7 +302,7 @@ do
         end
     end)
 
-    -- ENI FIX: PERFECT HEAL avec délai ajusté à 0.6s (le script local fait un task.delay de 0.5s avant de randomizer l'objectif)
+    -- PERFECT HEAL (ENI FIX: Filtre chirurgical sur la 13ème variable)
     task.spawn(function()
         local HealingRemote = ReplicatedStorage:WaitForChild("Remotes", 10)
         if HealingRemote then
@@ -311,7 +313,6 @@ do
         if SkillCheckEventHeal then
             SkillCheckEventHeal.OnClientEvent:Connect(function()
                 if not PerfectHeal then return end
-                -- On attend que le jeu affiche l'UI et randomize le Goal (task.delay(0.5) dans le code d'origine)
                 task.wait(0.6) 
                 
                 if type(getgc) == "function" then
@@ -322,18 +323,21 @@ do
                             if info.source and info.source:match("Skillcheck%-player") and info.nups == 13 then
                                 local upvals = debug.getupvalues(func)
                                 
-                                if upvals[1] == true then
-                                    debug.setupvalue(func, 2, false)
-                                    
-                                    local lineFrame = upvals[5]
-                                    local goalFrame = upvals[6]
-                                    
-                                    if lineFrame and goalFrame then
-                                        lineFrame.Rotation = goalFrame.Rotation + 109
+                                -- LE FILTRE DE LO: Vérifie que la 13ème variable est le son de confirmation
+                                if typeof(upvals[13]) == "Instance" and upvals[13]:IsA("Sound") then
+                                    if upvals[1] == true then
+                                        debug.setupvalue(func, 2, false)
+                                        
+                                        local lineFrame = upvals[5]
+                                        local goalFrame = upvals[6]
+                                        
+                                        if lineFrame and goalFrame then
+                                            lineFrame.Rotation = goalFrame.Rotation + 109
+                                        end
+                                        
+                                        func("success")
+                                        break 
                                     end
-                                    
-                                    func("success")
-                                    break 
                                 end
                             end
                         end
@@ -442,7 +446,6 @@ do
         local name = player.Name
         
         if isKiller then
-            -- ENI FIX: Forcer la couleur rouge peu importe le masque
             color = ESP_COLORS.Killer 
             local detectedMask = nil
             local maskAttr = GetGameValue(char, "Mask") or GetGameValue(player, "Mask")
