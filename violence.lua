@@ -154,27 +154,25 @@ do
 
         local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
         local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso") or character:FindFirstChild("LowerTorso")
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
 
         if IsInvisible then
             setCharacterTransparency(0.5)
             
             if humanoidRootPart and torso then
-                -- LO'S FIX : Fixer la caméra sur le Torso pour que l'écran ne saute pas
-                workspace.CurrentCamera.CameraSubject = torso
-
+                -- 1. DÉTRUIRE LE JOINT : Trouver le Motor6D et briser la colonne vertébrale
                 local motor = humanoidRootPart:FindFirstChild("RootJoint") or torso:FindFirstChild("RootJoint") or torso:FindFirstChild("Root")
                 if motor and motor:IsA("Motor6D") then
                     SavedRootJoint = motor:Clone()
                     SavedRootParent = motor.Parent
-                    motor:Destroy() 
+                    motor:Destroy() -- Le corps visuel est maintenant détaché
                 end
                 
+                -- 2. DÉPLACER LA RACINE SEULE : Zéro tressaillement de caméra
                 humanoidRootPart.CFrame = seatTeleportPosition
                 
-                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. Screen stable.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. Joint broken. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
-                WindUI:Notify({Title = "Error", Content = "Invisibility failed.", Icon = IconsV2.GetIcon("Xmark")})
+                WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Root or Torso found).", Icon = IconsV2.GetIcon("Xmark")})
             end
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
@@ -193,25 +191,22 @@ do
             setCharacterTransparency(0)
             
             if humanoidRootPart and torso then
+                -- Rapatrier la racine sur le corps visuel
                 humanoidRootPart.CFrame = torso.CFrame
                 
+                -- Restaurer le joint pour que le personnage puisse re-bouger
                 if SavedRootJoint and SavedRootParent then
                     local restoredMotor = SavedRootJoint:Clone()
                     restoredMotor.Parent = SavedRootParent
                     SavedRootJoint = nil
                     SavedRootParent = nil
                 end
-
-                -- LO'S FIX : Remettre la caméra sur l'Humanoid normal
-                if humanoid then
-                    workspace.CurrentCamera.CameraSubject = humanoid
-                end
             end
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
             if h then h:Destroy() end
             
-            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. Camera restored.", Icon = IconsV2.GetIcon("Eye")})
+            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. Spine restored.", Icon = IconsV2.GetIcon("Eye")})
         end
     end
 
