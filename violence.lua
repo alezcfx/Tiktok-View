@@ -120,7 +120,7 @@ do
     local UIToggleKey = Enum.KeyCode.PageDown
     local MenuOpen = true 
 
-    -- SERVER DESYNC INVISIBILITY VARIABLES
+    -- SERVER DESYNC INVISIBILITY
     local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
     local SavedRootJoint = nil
     local SavedRootParent = nil
@@ -172,9 +172,9 @@ do
                 
                 humanoidRootPart.CFrame = seatTeleportPosition
                 
-                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. Screen stable.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are hidden from others.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
-                WindUI:Notify({Title = "Error", Content = "Invisibility failed.", Icon = IconsV2.GetIcon("Xmark")})
+                WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
             end
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
@@ -211,7 +211,7 @@ do
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
             if h then h:Destroy() end
             
-            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. Camera restored.", Icon = IconsV2.GetIcon("Eye")})
+            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. You are visible.", Icon = IconsV2.GetIcon("Eye")})
         end
     end
 
@@ -605,7 +605,7 @@ do
         return closestPart
     end
 
-    -- LO'S FIX: Tuer l'indépendance de WindUI
+    -- LO'S FIX: Retour à la simplicité absolue. WindUI gère son menu tout seul.
     local Window = WindUI:CreateWindow({
         Title = "FORKT-HUB",
         Author = "by alz",
@@ -621,7 +621,7 @@ do
         Acrylic = true,
         HideSearchBar = false,
         Folder = "ForktHub",
-        ToggleKey = nil, -- CRUCIAL : On empêche WindUI de s'ouvrir tout seul
+        ToggleKey = UIToggleKey, -- WindUI écoute cette touche nativement
         OpenButton = {
             Title = "FORKT",
             Icon = IconsV2.GetIcon("Command"),
@@ -638,17 +638,6 @@ do
         },
         Topbar = {Height = 45, ButtonsType = "Mac"}
     })
-
-    -- LO'S FIX: Capturer l'interface secrète de WindUI par élimination
-    local WindUIGui = nil
-    task.spawn(function()
-        task.wait(1) 
-        for _, gui in pairs(TargetGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "FORKT_ESP_UI" and gui.Name ~= "FORKT_Indicator" and gui.Name ~= "VeilCrosshair" and gui.Name ~= "FORKT_LeaveBtn" then
-                WindUIGui = gui
-            end
-        end
-    end)
 
     if UserInputService.TouchEnabled then
         Window:SetSize(UDim2.fromOffset(850, 550))
@@ -900,6 +889,7 @@ do
         Callback = function(keyStr)
             local newKey = typeof(keyStr) == "EnumItem" and keyStr or Enum.KeyCode[keyStr]
             UIToggleKey = newKey 
+            Window:SetToggleKey(newKey) 
             WindUI:Notify({
                 Title = "Keybind Changed", 
                 Content = "UI Toggle key is now " .. newKey.Name, 
@@ -970,28 +960,26 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- LO'S MASTER CONTROLLER (Force WindUI, Force Mouse)
+    -- LO'S FIX : Retour à la simplicité absolue, WindUI gère son menu, on gère juste le LockCenter
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end 
+        -- Protection pour le tchat
+        if UserInputService:GetFocusedTextBox() then return end 
         
-        if input.KeyCode == UIToggleKey then
+        if input.KeyCode == UIToggleKey then 
             MenuOpen = not MenuOpen 
             
-            -- 1. On force l'interface visuelle secrète
-            if WindUIGui then
-                WindUIGui.Enabled = MenuOpen
-            end
-
-            -- 2. On force la souris
-            if MenuOpen then
-                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-                UserInputService.MouseIconEnabled = true
-            else
+            if not MenuOpen then
+                -- Quand ça ferme, on force le LockCenter
                 UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
                 UserInputService.MouseIconEnabled = false
+            else
+                -- Quand ça ouvre, on s'assure que c'est visible
+                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                UserInputService.MouseIconEnabled = true
             end
         end
         
+        if gameProcessed then return end
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
             PerformLeaveGenerator()
         end
