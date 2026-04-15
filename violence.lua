@@ -663,7 +663,7 @@ do
     end
 
     local Window = WindUI:CreateWindow({
-        Title = "FORKT-HUB",
+        Title = "ALZ-HUB",
         Author = "by alz",
         Icon = "rbxassetid://92373688580867",
         Theme = ThemeName,
@@ -676,10 +676,10 @@ do
         Transparent = true,
         Acrylic = true,
         HideSearchBar = false,
-        Folder = "ForktHub",
+        Folder = "ALZHUB",
         ToggleKey = Enum.KeyCode.PageDown,
         OpenButton = {
-            Title = "FORKT",
+            Title = "ALZ-HUB",
             Icon = IconsV2.GetIcon("Command"),
             CornerRadius = UDim.new(0, 14),
             Draggable = true,
@@ -918,7 +918,7 @@ do
     Tab4:Slider({Title = "Leave Distance (Studs)", Desc = "Teleport distance when escaping.", Step = 1, IsTooltip = true, Flag = "F_LeaveDist", Value = {Min = 10, Max = 50, Default = 25}, Callback = function(v) LeaveGenDistance = v end})
 
     local ConfigManager = Window.ConfigManager
-    local SaveName = "FORKT-HUB"
+    local SaveName = "ALZ-HUB"
     local Themes = {}
     for name, _ in pairs(WindUI.Themes) do table.insert(Themes, name) end
     
@@ -939,9 +939,9 @@ do
     TabSettings:Section({Title = "Window Configuration"})
     TabSettings:Dropdown({Title = "Select Theme", Flag = "F_Theme", Value = ThemeName, Values = Themes, Callback = function(v) WindUI:SetTheme(v) end})
     TabSettings:Toggle({Title = "Window Transparency", Flag = "F_Trans", Value = Window.Transparent, Callback = function(v) Window:ToggleTransparency(v) end})
-    TabSettings:Button({Title = "Unload FORKT-HUB", Desc = "Removes UI and turns off all features instantly", Icon = IconsV2.GetIcon("TrashFill"), Color = Color3.fromRGB(255, 60, 60), Justify = "Center", Callback = function()
+    TabSettings:Button({Title = "Unload ALZ-HUB", Desc = "Removes UI and turns off all features instantly", Icon = IconsV2.GetIcon("TrashFill"), Color = Color3.fromRGB(255, 60, 60), Justify = "Center", Callback = function()
         Window:Destroy()
-        WindUI:Notify({Title = "Unloaded", Content = "FORKT-HUB was successfully shut down safely.", Icon = IconsV2.GetIcon("CheckmarkShieldFill")})
+        WindUI:Notify({Title = "Unloaded", Content = "ALZ-HUB was successfully shut down safely.", Icon = IconsV2.GetIcon("CheckmarkShieldFill")})
     end})
 
     TabSettings:Section({Title = "Credits & Information"})
@@ -1291,5 +1291,5 @@ do
         end)
     end)
 
-    WindUI:Notify({Title = "FORKT-HUB", Content = "Script successfully loaded! (Clean Version)", Duration = 3, Icon = IconsV2.GetIcon("CheckmarkCircle")})
+    WindUI:Notify({Title = "ALZ-HUB", Content = "Script successfully loaded! (Clean Version)", Duration = 3, Icon = IconsV2.GetIcon("CheckmarkCircle")})
 end
