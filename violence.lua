@@ -116,13 +116,29 @@ do
     local LastUpdateTick, LastESPRefresh = 0, 0
     local FOVCircle = nil
     local AimDistance = 150
+    local MenuOpen = true
     
-    local UIToggleKey = Enum.KeyCode.V
+    local UIToggleKey = Enum.KeyCode.PageDown
 
     -- SERVER DESYNC INVISIBILITY VARIABLES
-    local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
-    local SavedRootJoint = nil
-    local SavedRootParent = nil
+    local seatTeleportPosition = Vector3.new(-25.95, 400, 3537.55)
+    local currentSeatPosition = nil
+    local seatReturnHeartbeatConnection = nil
+
+    local function startSeatReturnHeartbeat()
+        if seatReturnHeartbeatConnection then
+            seatReturnHeartbeatConnection:Disconnect()
+            seatReturnHeartbeatConnection = nil
+        end
+        seatReturnHeartbeatConnection = RunService.Heartbeat:Connect(function() end)
+    end
+
+    local function stopSeatReturnHeartbeat()
+        if seatReturnHeartbeatConnection then
+            seatReturnHeartbeatConnection:Disconnect()
+            seatReturnHeartbeatConnection = nil
+        end
+    end
 
     local function setCharacterTransparency(transparency)
         local character = Players.LocalPlayer.Character
@@ -153,26 +169,49 @@ do
         if not character then return end
 
         local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-        local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso") or character:FindFirstChild("LowerTorso")
+        local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+        local camera = workspace.CurrentCamera
 
         if IsInvisible then
             setCharacterTransparency(0.5)
             
             if humanoidRootPart and torso then
-                -- 1. DÉTRUIRE LE JOINT : Trouver le Motor6D et briser la colonne vertébrale
-                local motor = humanoidRootPart:FindFirstChild("RootJoint") or torso:FindFirstChild("RootJoint") or torso:FindFirstChild("Root")
-                if motor and motor:IsA("Motor6D") then
-                    SavedRootJoint = motor:Clone()
-                    SavedRootParent = motor.Parent
-                    motor:Destroy() -- Le corps visuel est maintenant détaché
-                end
+                local savedpos = humanoidRootPart.CFrame
+                local savedCamCFrame = camera.CFrame
                 
-                -- 2. DÉPLACER LA RACINE SEULE : Zéro tressaillement de caméra
-                humanoidRootPart.CFrame = seatTeleportPosition
+                -- ENI FIX: Figer la caméra via Scriptable pour qu'elle ne suive pas le saut
+                camera.CameraType = Enum.CameraType.Scriptable
+                camera.CFrame = savedCamCFrame
                 
-                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. Joint broken. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+                pcall(function() character:MoveTo(seatTeleportPosition) end)
+                task.wait(0.1)
+                
+                local Seat = Instance.new('Seat')
+                Seat.Parent = workspace
+                Seat.Anchored = false
+                Seat.CanCollide = false
+                Seat.Name = 'invischair'
+                Seat.Transparency = 1
+                Seat.Position = seatTeleportPosition
+                
+                local Weld = Instance.new("Weld")
+                Weld.Part0 = Seat
+                Weld.Part1 = torso
+                Weld.Parent = Seat
+                
+                task.wait()
+                pcall(function() Seat.CFrame = savedpos end)
+                currentSeatPosition = Seat.Position
+                startSeatReturnHeartbeat()
+                
+                -- Restituer la caméra
+                camera.CameraType = Enum.CameraType.Custom
+                local hum = character:FindFirstChildOfClass("Humanoid")
+                if hum then camera.CameraSubject = hum end
+                
+                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
-                WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Root or Torso found).", Icon = IconsV2.GetIcon("Xmark")})
+                WindUI:Notify({Title = "Error", Content = "Invisibility failed.", Icon = IconsV2.GetIcon("Xmark")})
             end
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
@@ -189,24 +228,24 @@ do
             end
         else
             setCharacterTransparency(0)
+            stopSeatReturnHeartbeat()
+            currentSeatPosition = nil
             
-            if humanoidRootPart and torso then
-                -- Rapatrier la racine sur le corps visuel
-                humanoidRootPart.CFrame = torso.CFrame
-                
-                -- Restaurer le joint pour que le personnage puisse re-bouger
-                if SavedRootJoint and SavedRootParent then
-                    local restoredMotor = SavedRootJoint:Clone()
-                    restoredMotor.Parent = SavedRootParent
-                    SavedRootJoint = nil
-                    SavedRootParent = nil
-                end
+            local hum = character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                camera.CameraType = Enum.CameraType.Custom
+                camera.CameraSubject = hum
             end
+            
+            task.spawn(function()
+                local inv = workspace:FindFirstChild('invischair')
+                if inv then pcall(function() inv:Destroy() end) end
+            end)
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
             if h then h:Destroy() end
             
-            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. Spine restored.", Icon = IconsV2.GetIcon("Eye")})
+            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. You are visible.", Icon = IconsV2.GetIcon("Eye")})
         end
     end
 
@@ -955,8 +994,18 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- LO'S FIX : gameProcessed protégé en haut, et TOUTE la logique de la souris de WindUI supprimée d'ici !
+    -- LO'S FIX : gameProcessed protégé en haut, et on laisse WindUI gérer sa souris !
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not UserInputService:GetFocusedTextBox() then
+            if input.KeyCode == UIToggleKey then 
+                MenuOpen = not MenuOpen
+                if not MenuOpen then
+                    UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+                    UserInputService.MouseIconEnabled = false
+                end
+            end
+        end
+        
         if gameProcessed then return end 
         
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
@@ -1004,7 +1053,7 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
-    -- LO'S FIX : Suppression définitive du forçage de la souris dans le RenderStepped !
+    -- LO'S FIX : Fini la boucle RenderStepped qui bloque la souris !
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -1021,6 +1070,11 @@ do
                     end
                 end
             end
+        end
+
+        if MenuOpen then
+            UserInputService.MouseIconEnabled = true
+            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
         end
 
         if FOVCircle then
@@ -1231,7 +1285,7 @@ do
     task.spawn(function()
         pcall(function()
             Window.CurrentConfig = ConfigManager:CreateConfig(SaveName)
-            --Window.CurrentConfig:Load()
+            Window.CurrentConfig:Load()
         end)
     end)
 
