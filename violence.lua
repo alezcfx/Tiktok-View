@@ -147,49 +147,79 @@ do
         end
     end
 
-local function ToggleInvisibility(state)
-    IsInvisible = state
-    local character = Players.LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-    local root = character.HumanoidRootPart
-    local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+    local function ToggleInvisibility(state)
+        IsInvisible = state
+        local character = Players.LocalPlayer.Character
+        if not character then return end
 
-    if IsInvisible then
-        setCharacterTransparency(0.5)
-        local savedpos = root.CFrame
-        
-        -- BRISER LE JOINT pour que la racine reste au ciel seule
-        local motor = root:FindFirstChild("RootJoint") or torso:FindFirstChild("RootJoint")
-        if motor then
-            SavedRootJoint = motor:Clone()
-            SavedRootParent = motor.Parent
-            motor:Destroy() 
+        if IsInvisible then
+            setCharacterTransparency(0.5)
+            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+            local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+            
+            if humanoidRootPart and torso then
+                -- LO'S BRILLIANT FIX: Figer la caméra sur le Torso pour éviter le bond
+                workspace.CurrentCamera.CameraSubject = torso
+
+                local savedpos = humanoidRootPart.CFrame
+                pcall(function() character:MoveTo(seatTeleportPosition) end)
+                task.wait(0.1)
+                
+                local Seat = Instance.new('Seat')
+                Seat.Parent = workspace
+                Seat.Anchored = false
+                Seat.CanCollide = false
+                Seat.Name = 'invischair'
+                Seat.Transparency = 1
+                Seat.Position = seatTeleportPosition
+                
+                local Weld = Instance.new("Weld")
+                Weld.Part0 = Seat
+                Weld.Part1 = torso
+                Weld.Parent = Seat
+                task.wait()
+                pcall(function() Seat.CFrame = savedpos end)
+                currentSeatPosition = Seat.Position
+                startSeatReturnHeartbeat()
+                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are now a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+            else
+                WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
+            end
+            
+            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
+            if not h then
+                h = Instance.new("Highlight")
+                h.Name = "GhostHighlight_" .. LocalPlayer.Name
+                h.Adornee = character
+                h.FillColor = Color3.fromRGB(255, 255, 255)
+                h.FillTransparency = 0.65
+                h.OutlineColor = Color3.fromRGB(200, 200, 200)
+                h.OutlineTransparency = 0.1
+                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                h.Parent = TargetGui
+            end
+        else
+            setCharacterTransparency(0)
+            stopSeatReturnHeartbeat()
+            currentSeatPosition = nil
+            
+            -- FIX: Rendre le contrôle de la caméra au Humanoid
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                workspace.CurrentCamera.CameraSubject = humanoid
+            end
+            
+            task.spawn(function()
+                local inv = workspace:FindFirstChild('invischair')
+                if inv then pcall(function() inv:Destroy() end) end
+            end)
+            
+            local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
+            if h then h:Destroy() end
+            
+            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. You are visible.", Icon = IconsV2.GetIcon("Eye")})
         end
-
-        root.CFrame = seatTeleportPosition -- La racine part au ciel
-        task.wait(0.1)
-
-        -- Ramener le corps au sol via la chaise
-        local Seat = Instance.new('Seat', workspace)
-        Seat.Name = 'invischair'
-        Seat.Transparency = 1
-        Seat.CanCollide = false
-        Seat.CFrame = savedpos -- La chaise est au sol
-        
-        local Weld = Instance.new("Weld", Seat)
-        Weld.Part0 = Seat
-        Weld.Part1 = torso -- On soude le corps à la chaise au sol
-    else
-        -- RECOLLER LE PERSONNAGE
-        setCharacterTransparency(0)
-        if SavedRootJoint and SavedRootParent then
-            local restored = SavedRootJoint:Clone()
-            restored.Parent = SavedRootParent
-        end
-        local inv = workspace:FindFirstChild('invischair')
-        if inv then inv:Destroy() end
     end
-end
 
     -- PERFECT GEN
     task.spawn(function()
