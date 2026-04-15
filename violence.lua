@@ -118,20 +118,13 @@ do
     local AimDistance = 150
     
     local UIToggleKey = Enum.KeyCode.PageDown
+
+    -- LO'S FIX: Variables de sauvegarde pour réparer la salle d'attente (Lobby)
+    local LastMouseState = Enum.MouseBehavior.Default
+    local LastMouseIcon = true
     local MenuOpen = true 
 
-    -- ENI FIX: Le bouton magique "Modal" pour gérer la souris nativement sans forcer le code
-    local ModalFix = Instance.new("TextButton")
-    ModalFix.Name = "FORKT_ModalFix"
-    ModalFix.Size = UDim2.new(0, 0, 0, 0)
-    ModalFix.Position = UDim2.new(0, 0, 0, 0)
-    ModalFix.BackgroundTransparency = 1
-    ModalFix.Text = ""
-    ModalFix.Modal = true -- C'est CA qui dit à Roblox de libérer la souris quand le menu est ouvert !
-    ModalFix.Visible = MenuOpen
-    ModalFix.Parent = TargetGui
-
-    -- SERVER DESYNC INVISIBILITY (Fonctionne parfaitement : leurre le serveur + fixe la caméra)
+    -- SERVER DESYNC INVISIBILITY
     local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
     local currentSeatPosition = nil
     local seatReturnHeartbeatConnection = nil
@@ -180,21 +173,22 @@ do
         if not character then return end
 
         local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-        local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso") or character:FindFirstChild("LowerTorso")
+        local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
         local camera = workspace.CurrentCamera
 
         if IsInvisible then
             setCharacterTransparency(0.5)
             
             if humanoidRootPart and torso then
-                -- On fixe la caméra sur le torse
-                camera.CameraSubject = torso
-
                 local savedpos = humanoidRootPart.CFrame
+                local savedCamCFrame = camera.CFrame
+                
+                camera.CameraType = Enum.CameraType.Scriptable
+                camera.CFrame = savedCamCFrame
+                
                 pcall(function() character:MoveTo(seatTeleportPosition.Position) end)
                 task.wait(0.1)
                 
-                -- La technique du Seat pour leurrer le serveur
                 local Seat = Instance.new('Seat')
                 Seat.Parent = workspace
                 Seat.Anchored = false
@@ -213,7 +207,11 @@ do
                 currentSeatPosition = Seat.Position
                 startSeatReturnHeartbeat()
                 
-                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are hidden from others.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+                camera.CameraType = Enum.CameraType.Custom
+                local hum = character:FindFirstChildOfClass("Humanoid")
+                if hum then camera.CameraSubject = hum end
+                
+                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
                 WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
             end
@@ -235,9 +233,9 @@ do
             stopSeatReturnHeartbeat()
             currentSeatPosition = nil
             
-            -- On rend la caméra au Humanoid
             local hum = character:FindFirstChildOfClass("Humanoid")
             if hum then
+                camera.CameraType = Enum.CameraType.Custom
                 camera.CameraSubject = hum
             end
             
@@ -658,7 +656,7 @@ do
         Acrylic = true,
         HideSearchBar = false,
         Folder = "ForktHub",
-        ToggleKey = nil, -- On empêche WindUI de s'ouvrir tout seul pour éviter les conflits
+        ToggleKey = UIToggleKey,
         OpenButton = {
             Title = "FORKT",
             Icon = IconsV2.GetIcon("Command"),
@@ -675,17 +673,6 @@ do
         },
         Topbar = {Height = 45, ButtonsType = "Mac"}
     })
-
-    -- On trouve l'interface générée par WindUI pour la lier à notre ModalFix
-    local WindUIGui = nil
-    task.spawn(function()
-        task.wait(1) 
-        for _, gui in pairs(TargetGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "FORKT_ESP_UI" and gui.Name ~= "FORKT_Indicator" and gui.Name ~= "VeilCrosshair" and gui.Name ~= "FORKT_LeaveBtn" and gui.Name ~= "WindUI" then
-                WindUIGui = gui
-            end
-        end
-    end)
 
     if UserInputService.TouchEnabled then
         Window:SetSize(UDim2.fromOffset(850, 550))
@@ -937,6 +924,7 @@ do
         Callback = function(keyStr)
             local newKey = typeof(keyStr) == "EnumItem" and keyStr or Enum.KeyCode[keyStr]
             UIToggleKey = newKey 
+            Window:SetToggleKey(newKey) 
             WindUI:Notify({
                 Title = "Keybind Changed", 
                 Content = "UI Toggle key is now " .. newKey.Name, 
@@ -1007,24 +995,29 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- ENI'S MASTER FIX : Toggle Parfait via propriété Modal Native
+    -- LO'S FIX : Restauration intelligente de l'état de la souris
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if UserInputService:GetFocusedTextBox() then return end 
         
         if input.KeyCode == UIToggleKey then 
             MenuOpen = not MenuOpen 
             
-            if WindUIGui then
-                WindUIGui.Enabled = MenuOpen
-            end
-            
-            if ModalFix then
-                ModalFix.Visible = MenuOpen
+            if MenuOpen then
+                -- On mémorise ce que le jeu fait naturellement
+                LastMouseState = UserInputService.MouseBehavior
+                LastMouseIcon = UserInputService.MouseIconEnabled
+                
+                -- On ouvre l'accès pour le menu
+                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                UserInputService.MouseIconEnabled = true
+            else
+                -- On rend la main au jeu !
+                UserInputService.MouseBehavior = LastMouseState
+                UserInputService.MouseIconEnabled = LastMouseIcon
             end
         end
         
         if gameProcessed then return end
-        
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
             PerformLeaveGenerator()
         end
@@ -1070,6 +1063,7 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
+    -- On a retiré le forçage continuel de la souris d'ici
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
