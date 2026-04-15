@@ -118,26 +118,14 @@ do
     local AimDistance = 150
     
     local UIToggleKey = Enum.KeyCode.PageDown
+    
+    -- LO'S FIX: Variable de mémoire rétablie pour ne plus perdre le fil !
+    local MenuOpen = true 
 
     -- SERVER DESYNC INVISIBILITY VARIABLES
     local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
-    local currentSeatPosition = nil
-    local seatReturnHeartbeatConnection = nil
-
-    local function startSeatReturnHeartbeat()
-        if seatReturnHeartbeatConnection then
-            seatReturnHeartbeatConnection:Disconnect()
-            seatReturnHeartbeatConnection = nil
-        end
-        seatReturnHeartbeatConnection = RunService.Heartbeat:Connect(function() end)
-    end
-
-    local function stopSeatReturnHeartbeat()
-        if seatReturnHeartbeatConnection then
-            seatReturnHeartbeatConnection:Disconnect()
-            seatReturnHeartbeatConnection = nil
-        end
-    end
+    local SavedRootJoint = nil
+    local SavedRootParent = nil
 
     local function setCharacterTransparency(transparency)
         local character = Players.LocalPlayer.Character
@@ -175,35 +163,20 @@ do
             setCharacterTransparency(0.5)
             
             if humanoidRootPart and torso then
-                -- LO'S FIX: On verrouille la caméra sur le Torso avant la téléportation
-                camera.CameraSubject = torso
+                workspace.CurrentCamera.CameraSubject = torso
 
-                local savedpos = humanoidRootPart.CFrame
-                pcall(function() character:MoveTo(seatTeleportPosition.Position) end)
-                task.wait(0.1)
+                local motor = humanoidRootPart:FindFirstChild("RootJoint") or torso:FindFirstChild("RootJoint") or torso:FindFirstChild("Root")
+                if motor and motor:IsA("Motor6D") then
+                    SavedRootJoint = motor:Clone()
+                    SavedRootParent = motor.Parent
+                    motor:Destroy() 
+                end
                 
-                -- LE VRAI SERVER DESYNC (Cache des autres joueurs)
-                local Seat = Instance.new('Seat')
-                Seat.Parent = workspace
-                Seat.Anchored = false
-                Seat.CanCollide = false
-                Seat.Name = 'invischair'
-                Seat.Transparency = 1
-                Seat.CFrame = seatTeleportPosition
+                humanoidRootPart.CFrame = seatTeleportPosition
                 
-                local Weld = Instance.new("Weld")
-                Weld.Part0 = Seat
-                Weld.Part1 = torso
-                Weld.Parent = Seat
-                
-                task.wait()
-                pcall(function() Seat.CFrame = savedpos end)
-                currentSeatPosition = Seat.Position
-                startSeatReturnHeartbeat()
-                
-                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are hidden from others.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. Screen stable.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
-                WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
+                WindUI:Notify({Title = "Error", Content = "Invisibility failed.", Icon = IconsV2.GetIcon("Xmark")})
             end
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
@@ -220,24 +193,27 @@ do
             end
         else
             setCharacterTransparency(0)
-            stopSeatReturnHeartbeat()
-            currentSeatPosition = nil
             
-            -- On rend la caméra au Humanoid
-            local hum = character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                camera.CameraSubject = hum
+            if humanoidRootPart and torso then
+                humanoidRootPart.CFrame = torso.CFrame
+                
+                if SavedRootJoint and SavedRootParent then
+                    local restoredMotor = SavedRootJoint:Clone()
+                    restoredMotor.Parent = SavedRootParent
+                    SavedRootJoint = nil
+                    SavedRootParent = nil
+                end
+
+                local hum = character:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    workspace.CurrentCamera.CameraSubject = hum
+                end
             end
-            
-            task.spawn(function()
-                local inv = workspace:FindFirstChild('invischair')
-                if inv then pcall(function() inv:Destroy() end) end
-            end)
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
             if h then h:Destroy() end
             
-            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. You are visible.", Icon = IconsV2.GetIcon("Eye")})
+            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. Camera restored.", Icon = IconsV2.GetIcon("Eye")})
         end
     end
 
@@ -985,17 +961,19 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- ENI FIX: Contrôle direct et intelligent de l'inversion de la souris (gameProcessed sécurisé en haut)
+    -- LO'S ULTIMATE FIX : Mémoire de l'état restaurée et logique solide
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end 
         
         if input.KeyCode == UIToggleKey then 
-            if UserInputService.MouseIconEnabled then
-                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-                UserInputService.MouseIconEnabled = false
-            else
+            MenuOpen = not MenuOpen 
+            
+            if MenuOpen then
                 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
                 UserInputService.MouseIconEnabled = true
+            else
+                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+                UserInputService.MouseIconEnabled = false
             end
         end
         
