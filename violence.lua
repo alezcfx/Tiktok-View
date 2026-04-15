@@ -118,8 +118,6 @@ do
     local AimDistance = 150
     
     local UIToggleKey = Enum.KeyCode.PageDown
-    
-    -- LO'S FIX: Variable de mémoire rétablie pour ne plus perdre le fil !
     local MenuOpen = true 
 
     -- SERVER DESYNC INVISIBILITY VARIABLES
@@ -163,7 +161,7 @@ do
             setCharacterTransparency(0.5)
             
             if humanoidRootPart and torso then
-                workspace.CurrentCamera.CameraSubject = torso
+                camera.CameraSubject = torso
 
                 local motor = humanoidRootPart:FindFirstChild("RootJoint") or torso:FindFirstChild("RootJoint") or torso:FindFirstChild("Root")
                 if motor and motor:IsA("Motor6D") then
@@ -607,6 +605,7 @@ do
         return closestPart
     end
 
+    -- LO'S FIX: Tuer l'indépendance de WindUI
     local Window = WindUI:CreateWindow({
         Title = "FORKT-HUB",
         Author = "by alz",
@@ -622,7 +621,7 @@ do
         Acrylic = true,
         HideSearchBar = false,
         Folder = "ForktHub",
-        ToggleKey = UIToggleKey,
+        ToggleKey = nil, -- CRUCIAL : On empêche WindUI de s'ouvrir tout seul
         OpenButton = {
             Title = "FORKT",
             Icon = IconsV2.GetIcon("Command"),
@@ -639,6 +638,17 @@ do
         },
         Topbar = {Height = 45, ButtonsType = "Mac"}
     })
+
+    -- LO'S FIX: Capturer l'interface secrète de WindUI par élimination
+    local WindUIGui = nil
+    task.spawn(function()
+        task.wait(1) 
+        for _, gui in pairs(TargetGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name ~= "FORKT_ESP_UI" and gui.Name ~= "FORKT_Indicator" and gui.Name ~= "VeilCrosshair" and gui.Name ~= "FORKT_LeaveBtn" then
+                WindUIGui = gui
+            end
+        end
+    end)
 
     if UserInputService.TouchEnabled then
         Window:SetSize(UDim2.fromOffset(850, 550))
@@ -890,7 +900,6 @@ do
         Callback = function(keyStr)
             local newKey = typeof(keyStr) == "EnumItem" and keyStr or Enum.KeyCode[keyStr]
             UIToggleKey = newKey 
-            Window:SetToggleKey(newKey) 
             WindUI:Notify({
                 Title = "Keybind Changed", 
                 Content = "UI Toggle key is now " .. newKey.Name, 
@@ -961,13 +970,19 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- LO'S ULTIMATE FIX : Mémoire de l'état restaurée et logique solide
+    -- LO'S MASTER CONTROLLER (Force WindUI, Force Mouse)
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end 
         
-        if input.KeyCode == UIToggleKey then 
+        if input.KeyCode == UIToggleKey then
             MenuOpen = not MenuOpen 
             
+            -- 1. On force l'interface visuelle secrète
+            if WindUIGui then
+                WindUIGui.Enabled = MenuOpen
+            end
+
+            -- 2. On force la souris
             if MenuOpen then
                 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
                 UserInputService.MouseIconEnabled = true
