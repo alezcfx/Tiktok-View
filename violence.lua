@@ -116,7 +116,6 @@ do
     local LastUpdateTick, LastESPRefresh = 0, 0
     local FOVCircle = nil
     local AimDistance = 150
-    local MenuOpen = true
     
     local UIToggleKey = Enum.KeyCode.PageDown
 
@@ -880,14 +879,20 @@ do
     TabSettings:Dropdown({Title = "Select Theme", Flag = "F_Theme", Value = ThemeName, Values = Themes, Callback = function(v) WindUI:SetTheme(v) end})
     TabSettings:Toggle({Title = "Window Transparency", Flag = "F_Trans", Value = Window.Transparent, Callback = function(v) Window:ToggleTransparency(v) end})
     
+    -- LO'S FIX : Conversion propre string/Enum et méthode officielle Window:SetToggleKey()
     TabSettings:Keybind({
         Title = "UI Toggle Key",
         Desc = "Change the key used to hide/show the menu.",
         Key = UIToggleKey,
-        Callback = function(key)
-            UIToggleKey = key
-            Window:SetToggleKey(key) -- ENI FIX: Utilisation de l'API officielle
-            WindUI:Notify({Title = "Keybind Changed", Content = "UI Toggle key is now " .. key.Name, Icon = IconsV2.GetIcon("Keyboard")})
+        Callback = function(keyStr)
+            local newKey = typeof(keyStr) == "EnumItem" and keyStr or Enum.KeyCode[keyStr]
+            UIToggleKey = newKey 
+            Window:SetToggleKey(newKey) 
+            WindUI:Notify({
+                Title = "Keybind Changed", 
+                Content = "UI Toggle key is now " .. newKey.Name, 
+                Icon = IconsV2.GetIcon("Keyboard")
+            })
         end
     })
 
@@ -953,20 +958,9 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- ENI FIX: gameProcessed géré correctement ET suppression du blocage inutile
+    -- LO'S FIX : gameProcessed protégé en haut, et TOUTE la logique de la souris de WindUI supprimée d'ici !
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end 
-        
-        if input.KeyCode == UIToggleKey then 
-            MenuOpen = not MenuOpen
-            if not MenuOpen then
-                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-                UserInputService.MouseIconEnabled = false
-            else
-                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-                UserInputService.MouseIconEnabled = true
-            end
-        end
         
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
             PerformLeaveGenerator()
@@ -1013,6 +1007,7 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
+    -- LO'S FIX : Suppression définitive du forçage de la souris dans le RenderStepped !
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -1029,11 +1024,6 @@ do
                     end
                 end
             end
-        end
-
-        if MenuOpen then
-            UserInputService.MouseIconEnabled = true
-            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
         end
 
         if FOVCircle then
