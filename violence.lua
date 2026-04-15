@@ -117,26 +117,13 @@ do
     local FOVCircle = nil
     local AimDistance = 150
     local MenuOpen = true
+    
+    local UIToggleKey = Enum.KeyCode.PageDown
 
-    -- SERVER DESYNC INVISIBILITY LOGIC
-    local seatTeleportPosition = Vector3.new(-25.95, 400, 3537.55)
-    local currentSeatPosition = nil
-    local seatReturnHeartbeatConnection = nil
-
-    local function startSeatReturnHeartbeat()
-        if seatReturnHeartbeatConnection then
-            seatReturnHeartbeatConnection:Disconnect()
-            seatReturnHeartbeatConnection = nil
-        end
-        seatReturnHeartbeatConnection = RunService.Heartbeat:Connect(function() end)
-    end
-
-    local function stopSeatReturnHeartbeat()
-        if seatReturnHeartbeatConnection then
-            seatReturnHeartbeatConnection:Disconnect()
-            seatReturnHeartbeatConnection = nil
-        end
-    end
+    -- SERVER DESYNC INVISIBILITY VARIABLES
+    local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
+    local SavedRootJoint = nil
+    local SavedRootParent = nil
 
     local function setCharacterTransparency(transparency)
         local character = Players.LocalPlayer.Character
@@ -166,38 +153,25 @@ do
         local character = Players.LocalPlayer.Character
         if not character then return end
 
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso") or character:FindFirstChild("LowerTorso")
+
         if IsInvisible then
             setCharacterTransparency(0.5)
-            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-            local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
             
             if humanoidRootPart and torso then
-                -- LO'S BRILLIANT FIX: Figer la caméra sur le Torso pour éviter le bond
-                workspace.CurrentCamera.CameraSubject = torso
-
-                local savedpos = humanoidRootPart.CFrame
-                pcall(function() character:MoveTo(seatTeleportPosition) end)
-                task.wait(0.1)
+                local motor = humanoidRootPart:FindFirstChild("RootJoint") or torso:FindFirstChild("RootJoint") or torso:FindFirstChild("Root")
+                if motor and motor:IsA("Motor6D") then
+                    SavedRootJoint = motor:Clone()
+                    SavedRootParent = motor.Parent
+                    motor:Destroy() 
+                end
                 
-                local Seat = Instance.new('Seat')
-                Seat.Parent = workspace
-                Seat.Anchored = false
-                Seat.CanCollide = false
-                Seat.Name = 'invischair'
-                Seat.Transparency = 1
-                Seat.Position = seatTeleportPosition
+                humanoidRootPart.CFrame = seatTeleportPosition
                 
-                local Weld = Instance.new("Weld")
-                Weld.Part0 = Seat
-                Weld.Part1 = torso
-                Weld.Parent = Seat
-                task.wait()
-                pcall(function() Seat.CFrame = savedpos end)
-                currentSeatPosition = Seat.Position
-                startSeatReturnHeartbeat()
-                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are now a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. Joint broken. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
-                WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
+                WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Root or Torso found).", Icon = IconsV2.GetIcon("Xmark")})
             end
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
@@ -214,24 +188,22 @@ do
             end
         else
             setCharacterTransparency(0)
-            stopSeatReturnHeartbeat()
-            currentSeatPosition = nil
             
-            -- FIX: Rendre le contrôle de la caméra au Humanoid
-            local humanoid = character:FindFirstChildOfClass("Humanoid")
-            if humanoid then
-                workspace.CurrentCamera.CameraSubject = humanoid
+            if humanoidRootPart and torso then
+                humanoidRootPart.CFrame = torso.CFrame
+                
+                if SavedRootJoint and SavedRootParent then
+                    local restoredMotor = SavedRootJoint:Clone()
+                    restoredMotor.Parent = SavedRootParent
+                    SavedRootJoint = nil
+                    SavedRootParent = nil
+                end
             end
-            
-            task.spawn(function()
-                local inv = workspace:FindFirstChild('invischair')
-                if inv then pcall(function() inv:Destroy() end) end
-            end)
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
             if h then h:Destroy() end
             
-            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. You are visible.", Icon = IconsV2.GetIcon("Eye")})
+            WindUI:Notify({Title = "Invisible Mode", Content = "Invisibility disabled. Spine restored.", Icon = IconsV2.GetIcon("Eye")})
         end
     end
 
@@ -636,6 +608,7 @@ do
         return closestPart
     end
 
+    -- ENI FIX: Désactivation du système ToggleKey interne de WindUI pour tout gérer proprement nous-mêmes
     local Window = WindUI:CreateWindow({
         Title = "FORKT-HUB",
         Author = "by alz",
@@ -651,7 +624,7 @@ do
         Acrylic = true,
         HideSearchBar = false,
         Folder = "ForktHub",
-        ToggleKey = Enum.KeyCode.PageDown,
+        ToggleKey = nil, -- On coupe le raccourci interne buggé
         OpenButton = {
             Title = "FORKT",
             Icon = IconsV2.GetIcon("Command"),
@@ -744,6 +717,7 @@ do
         AntiKnock = v
         WindUI:Notify({Title = "Anti Knock", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("FigureStand") or IconsV2.GetIcon("FigureFall")})
     end})
+    
     Tab1:Toggle({Title = "Speed Boost", Desc = "Increases running speed.", Flag = "F_SpeedBoost", Value = false, Callback = function(v)
         SpeedBoost = v
         WindUI:Notify({Title = "Speed Boost", Content = v and "Successfully enabled!" or "Has been disabled.", Icon = v and IconsV2.GetIcon("BoltFill") or IconsV2.GetIcon("BoltSlashFill")})
@@ -755,6 +729,7 @@ do
     Tab1:Slider({Title = "Custom Speed", Step = 1, IsTooltip = true, Flag = "F_BoostSpeed", Value = {Min = 16, Max = 100, Default = 24}, Icons = {From = IconsV2.GetIcon("FigureRun"), To = IconsV2.GetIcon("Gearshape")}, Callback = function(v) BoostSpeed = v end})
 
     Tab1:Section({Title = "Exploits"})
+    
     Tab1:Toggle({Title = "Invisible Mode", Desc = "True Server-Sided Invisibility. You become a ghost.", Flag = "F_Invisible", Value = false, Callback = function(v)
         ToggleInvisibility(v)
     end})
@@ -909,6 +884,18 @@ do
     TabSettings:Section({Title = "Window Configuration"})
     TabSettings:Dropdown({Title = "Select Theme", Flag = "F_Theme", Value = ThemeName, Values = Themes, Callback = function(v) WindUI:SetTheme(v) end})
     TabSettings:Toggle({Title = "Window Transparency", Flag = "F_Trans", Value = Window.Transparent, Callback = function(v) Window:ToggleTransparency(v) end})
+    
+    -- ENI FIX: Option pour modifier la touche du menu 
+    TabSettings:Keybind({
+        Title = "UI Toggle Key",
+        Desc = "Change the key used to hide/show the menu.",
+        Key = UIToggleKey,
+        Callback = function(key)
+            UIToggleKey = key
+            WindUI:Notify({Title = "Keybind Changed", Content = "UI Toggle key is now " .. key.Name, Icon = IconsV2.GetIcon("Keyboard")})
+        end
+    })
+
     TabSettings:Button({Title = "Unload FORKT-HUB", Desc = "Removes UI and turns off all features instantly", Icon = IconsV2.GetIcon("TrashFill"), Color = Color3.fromRGB(255, 60, 60), Justify = "Center", Callback = function()
         Window:Destroy()
         WindUI:Notify({Title = "Unloaded", Content = "FORKT-HUB was successfully shut down safely.", Icon = IconsV2.GetIcon("CheckmarkShieldFill")})
@@ -971,16 +958,28 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
+    -- ENI FIX: gameProcessed vérifié EN PREMIER + Force l'interface WindUI manuellement
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if input.KeyCode == Enum.KeyCode.PageDown then
+        if gameProcessed then return end
+        
+        if input.KeyCode == UIToggleKey then
             MenuOpen = not MenuOpen
+            
+            -- FORCER l'affichage/masquage manuel de l'UI WindUI pour court-circuiter son listener interne
+            local forktHub = TargetGui:FindFirstChild("ForktHub")
+            if forktHub then
+                forktHub.Enabled = MenuOpen
+            end
+
             if not MenuOpen then
                 UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
                 UserInputService.MouseIconEnabled = false
+            else
+                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                UserInputService.MouseIconEnabled = true
             end
         end
         
-        if gameProcessed then return end
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
             PerformLeaveGenerator()
         end
