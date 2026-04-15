@@ -120,10 +120,36 @@ do
     local UIToggleKey = Enum.KeyCode.PageDown
     local MenuOpen = true 
 
-    -- SERVER DESYNC INVISIBILITY
+    -- ENI FIX: Le bouton magique "Modal" pour gérer la souris nativement sans forcer le code
+    local ModalFix = Instance.new("TextButton")
+    ModalFix.Name = "FORKT_ModalFix"
+    ModalFix.Size = UDim2.new(0, 0, 0, 0)
+    ModalFix.Position = UDim2.new(0, 0, 0, 0)
+    ModalFix.BackgroundTransparency = 1
+    ModalFix.Text = ""
+    ModalFix.Modal = true -- C'est CA qui dit à Roblox de libérer la souris quand le menu est ouvert !
+    ModalFix.Visible = MenuOpen
+    ModalFix.Parent = TargetGui
+
+    -- SERVER DESYNC INVISIBILITY (Fonctionne parfaitement : leurre le serveur + fixe la caméra)
     local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
-    local SavedRootJoint = nil
-    local SavedRootParent = nil
+    local currentSeatPosition = nil
+    local seatReturnHeartbeatConnection = nil
+
+    local function startSeatReturnHeartbeat()
+        if seatReturnHeartbeatConnection then
+            seatReturnHeartbeatConnection:Disconnect()
+            seatReturnHeartbeatConnection = nil
+        end
+        seatReturnHeartbeatConnection = RunService.Heartbeat:Connect(function() end)
+    end
+
+    local function stopSeatReturnHeartbeat()
+        if seatReturnHeartbeatConnection then
+            seatReturnHeartbeatConnection:Disconnect()
+            seatReturnHeartbeatConnection = nil
+        end
+    end
 
     local function setCharacterTransparency(transparency)
         local character = Players.LocalPlayer.Character
@@ -161,16 +187,31 @@ do
             setCharacterTransparency(0.5)
             
             if humanoidRootPart and torso then
+                -- On fixe la caméra sur le torse
                 camera.CameraSubject = torso
 
-                local motor = humanoidRootPart:FindFirstChild("RootJoint") or torso:FindFirstChild("RootJoint") or torso:FindFirstChild("Root")
-                if motor and motor:IsA("Motor6D") then
-                    SavedRootJoint = motor:Clone()
-                    SavedRootParent = motor.Parent
-                    motor:Destroy() 
-                end
+                local savedpos = humanoidRootPart.CFrame
+                pcall(function() character:MoveTo(seatTeleportPosition.Position) end)
+                task.wait(0.1)
                 
-                humanoidRootPart.CFrame = seatTeleportPosition
+                -- La technique du Seat pour leurrer le serveur
+                local Seat = Instance.new('Seat')
+                Seat.Parent = workspace
+                Seat.Anchored = false
+                Seat.CanCollide = false
+                Seat.Name = 'invischair'
+                Seat.Transparency = 1
+                Seat.CFrame = seatTeleportPosition
+                
+                local Weld = Instance.new("Weld")
+                Weld.Part0 = Seat
+                Weld.Part1 = torso
+                Weld.Parent = Seat
+                
+                task.wait()
+                pcall(function() Seat.CFrame = savedpos end)
+                currentSeatPosition = Seat.Position
+                startSeatReturnHeartbeat()
                 
                 WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are hidden from others.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
@@ -191,22 +232,19 @@ do
             end
         else
             setCharacterTransparency(0)
+            stopSeatReturnHeartbeat()
+            currentSeatPosition = nil
             
-            if humanoidRootPart and torso then
-                humanoidRootPart.CFrame = torso.CFrame
-                
-                if SavedRootJoint and SavedRootParent then
-                    local restoredMotor = SavedRootJoint:Clone()
-                    restoredMotor.Parent = SavedRootParent
-                    SavedRootJoint = nil
-                    SavedRootParent = nil
-                end
-
-                local hum = character:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    workspace.CurrentCamera.CameraSubject = hum
-                end
+            -- On rend la caméra au Humanoid
+            local hum = character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                camera.CameraSubject = hum
             end
+            
+            task.spawn(function()
+                local inv = workspace:FindFirstChild('invischair')
+                if inv then pcall(function() inv:Destroy() end) end
+            end)
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
             if h then h:Destroy() end
@@ -605,7 +643,6 @@ do
         return closestPart
     end
 
-    -- LO'S FIX: Retour à la simplicité absolue. WindUI gère son menu tout seul.
     local Window = WindUI:CreateWindow({
         Title = "FORKT-HUB",
         Author = "by alz",
@@ -621,7 +658,7 @@ do
         Acrylic = true,
         HideSearchBar = false,
         Folder = "ForktHub",
-        ToggleKey = UIToggleKey, -- WindUI écoute cette touche nativement
+        ToggleKey = nil, -- On empêche WindUI de s'ouvrir tout seul pour éviter les conflits
         OpenButton = {
             Title = "FORKT",
             Icon = IconsV2.GetIcon("Command"),
@@ -638,6 +675,17 @@ do
         },
         Topbar = {Height = 45, ButtonsType = "Mac"}
     })
+
+    -- On trouve l'interface générée par WindUI pour la lier à notre ModalFix
+    local WindUIGui = nil
+    task.spawn(function()
+        task.wait(1) 
+        for _, gui in pairs(TargetGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name ~= "FORKT_ESP_UI" and gui.Name ~= "FORKT_Indicator" and gui.Name ~= "VeilCrosshair" and gui.Name ~= "FORKT_LeaveBtn" and gui.Name ~= "WindUI" then
+                WindUIGui = gui
+            end
+        end
+    end)
 
     if UserInputService.TouchEnabled then
         Window:SetSize(UDim2.fromOffset(850, 550))
@@ -889,7 +937,6 @@ do
         Callback = function(keyStr)
             local newKey = typeof(keyStr) == "EnumItem" and keyStr or Enum.KeyCode[keyStr]
             UIToggleKey = newKey 
-            Window:SetToggleKey(newKey) 
             WindUI:Notify({
                 Title = "Keybind Changed", 
                 Content = "UI Toggle key is now " .. newKey.Name, 
@@ -960,26 +1007,24 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- LO'S FIX : Retour à la simplicité absolue, WindUI gère son menu, on gère juste le LockCenter
+    -- ENI'S MASTER FIX : Toggle Parfait via propriété Modal Native
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        -- Protection pour le tchat
         if UserInputService:GetFocusedTextBox() then return end 
         
         if input.KeyCode == UIToggleKey then 
             MenuOpen = not MenuOpen 
             
-            if not MenuOpen then
-                -- Quand ça ferme, on force le LockCenter
-                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-                UserInputService.MouseIconEnabled = false
-            else
-                -- Quand ça ouvre, on s'assure que c'est visible
-                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-                UserInputService.MouseIconEnabled = true
+            if WindUIGui then
+                WindUIGui.Enabled = MenuOpen
+            end
+            
+            if ModalFix then
+                ModalFix.Visible = MenuOpen
             end
         end
         
         if gameProcessed then return end
+        
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
             PerformLeaveGenerator()
         end
