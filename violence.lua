@@ -117,7 +117,7 @@ do
     local FOVCircle = nil
     local AimDistance = 150
     
-    local UIToggleKey = Enum.KeyCode.PageDown
+    local UIToggleKey = Enum.KeyCode.V
 
     -- SERVER DESYNC INVISIBILITY VARIABLES
     local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
@@ -150,51 +150,44 @@ do
 local function ToggleInvisibility(state)
     IsInvisible = state
     local character = Players.LocalPlayer.Character
-    if not character then return end
-
-    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    local root = character.HumanoidRootPart
     local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
 
     if IsInvisible then
         setCharacterTransparency(0.5)
+        local savedpos = root.CFrame
         
-        if humanoidRootPart and torso then
-            -- 1. Il sauvegarde la position où le joueur se trouve
-            local savedpos = humanoidRootPart.CFrame
-            
-            -- 2. Il envoie TOUT le corps dans le ciel (Caméra qui saute ici !)
-            pcall(function() character:MoveTo(seatTeleportPosition) end)
-            
-            -- 3. Le fameux délai qui donne la nausée
-            task.wait(0.1)
-            
-            -- 4. Il crée sa chaise magique et soude le corps dessus pour le redescendre
-            local Seat = Instance.new('Seat')
-            Seat.Parent = workspace
-            Seat.Anchored = false
-            Seat.CanCollide = false
-            Seat.Name = 'invischair'
-            Seat.Transparency = 1
-            Seat.Position = seatTeleportPosition
-            
-            local Weld = Instance.new("Weld")
-            Weld.Part0 = Seat
-            Weld.Part1 = torso
-            Weld.Parent = Seat
-            
-            -- 5. Il ramène la chaise au sol. Le corps redescend avec, et le joueur peut marcher !
-            task.wait()
-            pcall(function() Seat.CFrame = savedpos end)
-            
-            WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are a ghost."})
+        -- BRISER LE JOINT pour que la racine reste au ciel seule
+        local motor = root:FindFirstChild("RootJoint") or torso:FindFirstChild("RootJoint")
+        if motor then
+            SavedRootJoint = motor:Clone()
+            SavedRootParent = motor.Parent
+            motor:Destroy() 
         end
+
+        root.CFrame = seatTeleportPosition -- La racine part au ciel
+        task.wait(0.1)
+
+        -- Ramener le corps au sol via la chaise
+        local Seat = Instance.new('Seat', workspace)
+        Seat.Name = 'invischair'
+        Seat.Transparency = 1
+        Seat.CanCollide = false
+        Seat.CFrame = savedpos -- La chaise est au sol
+        
+        local Weld = Instance.new("Weld", Seat)
+        Weld.Part0 = Seat
+        Weld.Part1 = torso -- On soude le corps à la chaise au sol
     else
-        -- Code pour se rendre visible (Détruire la chaise et remettre la transparence à 0)
+        -- RECOLLER LE PERSONNAGE
         setCharacterTransparency(0)
-        task.spawn(function()
-            local inv = workspace:FindFirstChild('invischair')
-            if inv then pcall(function() inv:Destroy() end) end
-        end)
+        if SavedRootJoint and SavedRootParent then
+            local restored = SavedRootJoint:Clone()
+            restored.Parent = SavedRootParent
+        end
+        local inv = workspace:FindFirstChild('invischair')
+        if inv then inv:Destroy() end
     end
 end
 
@@ -1219,7 +1212,7 @@ end
     task.spawn(function()
         pcall(function()
             Window.CurrentConfig = ConfigManager:CreateConfig(SaveName)
-            Window.CurrentConfig:Load()
+            --Window.CurrentConfig:Load()
         end)
     end)
 
