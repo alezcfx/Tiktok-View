@@ -99,7 +99,7 @@ do
     local BoostSpeed, CameraFOVValue, AimRadius = 24, 100, 200
     local AutoAttack = false
     local AttackRange = 10
-    local RemoveFireCooldown = false -- ENI FIX: Option de tir ajoutée
+    local RemoveFireCooldown = false -- ENI FIX : La variable est bien là !
     local PerfectGen = false
     local PerfectHeal = false
     local WarnKiller = true
@@ -125,7 +125,7 @@ do
     local LastMouseIcon = true
     local MenuOpen = true 
 
-    -- SERVER DESYNC INVISIBILITY
+    -- SERVER DESYNC INVISIBILITY (Seat + Caméra fixée sur le Torso)
     local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
     local currentSeatPosition = nil
     local seatReturnHeartbeatConnection = nil
@@ -205,7 +205,6 @@ do
                 currentSeatPosition = Seat.Position
                 startSeatReturnHeartbeat()
                 
-                camera.CameraSubject = character:FindFirstChildOfClass("Humanoid")
                 WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
                 WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
@@ -858,7 +857,7 @@ do
     end})
 
     Tab3:Section({Title = "Weapon Exploits"})
-    -- ENI FIX: Option de spam de tir rétablie
+    -- ENI FIX: LE BOUTON EST LÀ, PRÊT À DÉTRUIRE LE JEU !
     Tab3:Toggle({Title = "Remove Fire Cooldown", Desc = "Spams Twist of Fate fire remote (Minigun mode).", Flag = "F_RemoveCooldown", Value = false, Callback = function(v)
         RemoveFireCooldown = v
         WindUI:Notify({Title = "Fire Cooldown", Content = v and "No Cooldown Enabled! (Minigun Mode)" or "No Cooldown Disabled.", Icon = v and IconsV2.GetIcon("FlameFill") or IconsV2.GetIcon("Flame")})
@@ -1079,7 +1078,7 @@ do
             end
         end
 
-        -- ENI FIX: Boucle de spam Minigun
+        -- ENI FIX: SPAM DE TIR MINIGUN
         if RemoveFireCooldown and LocalPlayer.Character then
             local char = LocalPlayer.Character
             local twistOfFate = char:FindFirstChild("Twist of Fate")
