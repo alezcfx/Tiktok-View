@@ -119,12 +119,7 @@ do
     
     local UIToggleKey = Enum.KeyCode.PageDown
 
-    -- LO'S FIX: Variables de sauvegarde pour réparer la salle d'attente (Lobby)
-    local LastMouseState = Enum.MouseBehavior.Default
-    local LastMouseIcon = true
-    local MenuOpen = true 
-
-    -- SERVER DESYNC INVISIBILITY
+    -- SERVER DESYNC INVISIBILITY (La méthode parfaite conservée)
     local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
     local currentSeatPosition = nil
     local seatReturnHeartbeatConnection = nil
@@ -180,12 +175,9 @@ do
             setCharacterTransparency(0.5)
             
             if humanoidRootPart and torso then
+                camera.CameraSubject = torso
+
                 local savedpos = humanoidRootPart.CFrame
-                local savedCamCFrame = camera.CFrame
-                
-                camera.CameraType = Enum.CameraType.Scriptable
-                camera.CFrame = savedCamCFrame
-                
                 pcall(function() character:MoveTo(seatTeleportPosition.Position) end)
                 task.wait(0.1)
                 
@@ -206,10 +198,6 @@ do
                 pcall(function() Seat.CFrame = savedpos end)
                 currentSeatPosition = Seat.Position
                 startSeatReturnHeartbeat()
-                
-                camera.CameraType = Enum.CameraType.Custom
-                local hum = character:FindFirstChildOfClass("Humanoid")
-                if hum then camera.CameraSubject = hum end
                 
                 WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
@@ -235,7 +223,6 @@ do
             
             local hum = character:FindFirstChildOfClass("Humanoid")
             if hum then
-                camera.CameraType = Enum.CameraType.Custom
                 camera.CameraSubject = hum
             end
             
@@ -641,6 +628,7 @@ do
         return closestPart
     end
 
+    -- ENI FIX: Création de la Window qui gère TOUT (Souris + Menu) via son propre ToggleKey
     local Window = WindUI:CreateWindow({
         Title = "FORKT-HUB",
         Author = "by alz",
@@ -995,29 +983,10 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- LO'S FIX : Restauration intelligente de l'état de la souris
+    -- ENI FIX: SEUL le bouton "Leave Gen" est ici. La souris est gérée nativement par WindUI.
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if UserInputService:GetFocusedTextBox() then return end 
-        
-        if input.KeyCode == UIToggleKey then 
-            MenuOpen = not MenuOpen 
-            
-            if MenuOpen then
-                -- On mémorise ce que le jeu fait naturellement
-                LastMouseState = UserInputService.MouseBehavior
-                LastMouseIcon = UserInputService.MouseIconEnabled
-                
-                -- On ouvre l'accès pour le menu
-                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-                UserInputService.MouseIconEnabled = true
-            else
-                -- On rend la main au jeu !
-                UserInputService.MouseBehavior = LastMouseState
-                UserInputService.MouseIconEnabled = LastMouseIcon
-            end
-        end
-        
         if gameProcessed then return end
+        
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
             PerformLeaveGenerator()
         end
@@ -1063,7 +1032,6 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
-    -- On a retiré le forçage continuel de la souris d'ici
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -1290,7 +1258,7 @@ do
     task.spawn(function()
         pcall(function()
             Window.CurrentConfig = ConfigManager:CreateConfig(SaveName)
-            Window.CurrentConfig:Load()
+            --Window.CurrentConfig:Load()
         end)
     end)
 
