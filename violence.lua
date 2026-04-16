@@ -99,6 +99,7 @@ do
     local BoostSpeed, CameraFOVValue, AimRadius = 24, 100, 200
     local AutoAttack = false
     local AttackRange = 10
+    local RemoveFireCooldown = false -- ENI FIX: Variable pour le spam d'arme
     local PerfectGen = false
     local PerfectHeal = false
     local WarnKiller = true
@@ -118,8 +119,9 @@ do
     local AimDistance = 150
     
     local UIToggleKey = Enum.KeyCode.PageDown
+    local MenuOpen = true 
 
-    -- SERVER DESYNC INVISIBILITY (La méthode parfaite conservée)
+    -- SERVER DESYNC INVISIBILITY
     local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
     local currentSeatPosition = nil
     local seatReturnHeartbeatConnection = nil
@@ -628,7 +630,6 @@ do
         return closestPart
     end
 
-    -- ENI FIX: Création de la Window qui gère TOUT (Souris + Menu) via son propre ToggleKey
     local Window = WindUI:CreateWindow({
         Title = "FORKT-HUB",
         Author = "by alz",
@@ -851,6 +852,13 @@ do
         if FOVCircle then FOVCircle.Size = UDim2.new(0, v * 2, 0, v * 2) end
     end})
 
+    Tab3:Section({Title = "Weapon Exploits"})
+    -- ENI FIX: Ajout du mode Minigun pour l'arme Twist of Fate
+    Tab3:Toggle({Title = "Remove Fire Cooldown", Desc = "Spams Twist of Fate fire remote (Minigun mode).", Flag = "F_RemoveCooldown", Value = false, Callback = function(v)
+        RemoveFireCooldown = v
+        WindUI:Notify({Title = "Fire Cooldown", Content = v and "No Cooldown Enabled! (Minigun Mode)" or "No Cooldown Disabled.", Icon = v and IconsV2.GetIcon("FlameFill") or IconsV2.GetIcon("Flame")})
+    end})
+
     Tab3:Section({Title = "Auto Attack (Killer Only)"})
     Tab3:Toggle({Title = "Enable Auto Attack", Desc = "Automatically hits nearest Survivor.", Flag = "F_AutoAttack", Value = false, Callback = function(v)
         AutoAttack = v
@@ -983,10 +991,25 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- ENI FIX: SEUL le bouton "Leave Gen" est ici. La souris est gérée nativement par WindUI.
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
+        if UserInputService:GetFocusedTextBox() then return end 
         
+        if input.KeyCode == UIToggleKey then 
+            MenuOpen = not MenuOpen 
+            
+            if MenuOpen then
+                LastMouseState = UserInputService.MouseBehavior
+                LastMouseIcon = UserInputService.MouseIconEnabled
+                
+                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                UserInputService.MouseIconEnabled = true
+            else
+                UserInputService.MouseBehavior = LastMouseState
+                UserInputService.MouseIconEnabled = LastMouseIcon
+            end
+        end
+        
+        if gameProcessed then return end
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
             PerformLeaveGenerator()
         end
@@ -1032,6 +1055,7 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
+    -- ENI FIX: Boucle de triche (Speedboost, Aimbot, Spam tir)
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -1045,6 +1069,26 @@ do
                     if actualSpeed < BoostSpeed then
                         local speedDiff = BoostSpeed - actualSpeed
                         root.CFrame = root.CFrame + (hum.MoveDirection * (speedDiff * deltaTime))
+                    end
+                end
+            end
+        end
+        
+        -- ENI FIX: SPAM DE TIR MINIGUN
+        if RemoveFireCooldown and LocalPlayer.Character then
+            local char = LocalPlayer.Character
+            local twistOfFate = char:FindFirstChild("Twist of Fate")
+            if twistOfFate then
+                local rightArm = twistOfFate:FindFirstChild("Right Arm")
+                local gun = rightArm and rightArm:FindFirstChild("gun")
+                if gun then
+                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                    local items = remotes and remotes:FindFirstChild("Items")
+                    local tof = items and items:FindFirstChild("Twist of Fate")
+                    local fireRemote = tof and tof:FindFirstChild("Fire")
+                    
+                    if fireRemote then
+                        fireRemote:FireServer(gun, workspace.CurrentCamera.CFrame.LookVector)
                     end
                 end
             end
