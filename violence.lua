@@ -99,7 +99,7 @@ do
     local BoostSpeed, CameraFOVValue, AimRadius = 24, 100, 200
     local AutoAttack = false
     local AttackRange = 10
-    local RemoveFireCooldown = false -- ENI FIX: Variable pour le spam d'arme
+    local RemoveFireCooldown = false -- ENI FIX: Option de tir ajoutée
     local PerfectGen = false
     local PerfectHeal = false
     local WarnKiller = true
@@ -119,6 +119,10 @@ do
     local AimDistance = 150
     
     local UIToggleKey = Enum.KeyCode.PageDown
+
+    -- LO'S FIX: Variables de sauvegarde pour réparer la salle d'attente (Lobby)
+    local LastMouseState = Enum.MouseBehavior.Default
+    local LastMouseIcon = true
     local MenuOpen = true 
 
     -- SERVER DESYNC INVISIBILITY
@@ -201,6 +205,7 @@ do
                 currentSeatPosition = Seat.Position
                 startSeatReturnHeartbeat()
                 
+                camera.CameraSubject = character:FindFirstChildOfClass("Humanoid")
                 WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
                 WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
@@ -853,7 +858,7 @@ do
     end})
 
     Tab3:Section({Title = "Weapon Exploits"})
-    -- ENI FIX: Ajout du mode Minigun pour l'arme Twist of Fate
+    -- ENI FIX: Option de spam de tir rétablie
     Tab3:Toggle({Title = "Remove Fire Cooldown", Desc = "Spams Twist of Fate fire remote (Minigun mode).", Flag = "F_RemoveCooldown", Value = false, Callback = function(v)
         RemoveFireCooldown = v
         WindUI:Notify({Title = "Fire Cooldown", Content = v and "No Cooldown Enabled! (Minigun Mode)" or "No Cooldown Disabled.", Icon = v and IconsV2.GetIcon("FlameFill") or IconsV2.GetIcon("Flame")})
@@ -991,6 +996,7 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
+    -- LO'S FIX: Sauvegarde et Restauration intelligente de l'état de la souris
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if UserInputService:GetFocusedTextBox() then return end 
         
@@ -1055,7 +1061,6 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
-    -- ENI FIX: Boucle de triche (Speedboost, Aimbot, Spam tir)
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -1073,8 +1078,8 @@ do
                 end
             end
         end
-        
-        -- ENI FIX: SPAM DE TIR MINIGUN
+
+        -- ENI FIX: Boucle de spam Minigun
         if RemoveFireCooldown and LocalPlayer.Character then
             local char = LocalPlayer.Character
             local twistOfFate = char:FindFirstChild("Twist of Fate")
