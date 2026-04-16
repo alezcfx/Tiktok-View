@@ -118,9 +118,13 @@ do
     local AimDistance = 150
     
     local UIToggleKey = Enum.KeyCode.PageDown
+
+    -- LO'S FIX: Variables de sauvegarde pour réparer la salle d'attente (Lobby)
+    local LastMouseState = Enum.MouseBehavior.Default
+    local LastMouseIcon = true
     local MenuOpen = true 
 
-    -- SERVER DESYNC INVISIBILITY (Chaise + Caméra fixée)
+    -- SERVER DESYNC INVISIBILITY
     local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
     local currentSeatPosition = nil
     local seatReturnHeartbeatConnection = nil
@@ -176,9 +180,12 @@ do
             setCharacterTransparency(0.5)
             
             if humanoidRootPart and torso then
-                camera.CameraSubject = torso
-
                 local savedpos = humanoidRootPart.CFrame
+                local savedCamCFrame = camera.CFrame
+                
+                camera.CameraType = Enum.CameraType.Scriptable
+                camera.CFrame = savedCamCFrame
+                
                 pcall(function() character:MoveTo(seatTeleportPosition.Position) end)
                 task.wait(0.1)
                 
@@ -200,7 +207,11 @@ do
                 currentSeatPosition = Seat.Position
                 startSeatReturnHeartbeat()
                 
-                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are hidden from others.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+                camera.CameraType = Enum.CameraType.Custom
+                local hum = character:FindFirstChildOfClass("Humanoid")
+                if hum then camera.CameraSubject = hum end
+                
+                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
                 WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
             end
@@ -224,6 +235,7 @@ do
             
             local hum = character:FindFirstChildOfClass("Humanoid")
             if hum then
+                camera.CameraType = Enum.CameraType.Custom
                 camera.CameraSubject = hum
             end
             
@@ -983,7 +995,7 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- ENI'S FIX : Logique binaire brute pour la souris. Plus d'inversion possible.
+    -- LO'S FIX : Restauration intelligente de l'état de la souris
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if UserInputService:GetFocusedTextBox() then return end 
         
@@ -991,13 +1003,17 @@ do
             MenuOpen = not MenuOpen 
             
             if MenuOpen then
-                -- Menu ouvert : La souris apparaît
+                -- On mémorise ce que le jeu fait naturellement
+                LastMouseState = UserInputService.MouseBehavior
+                LastMouseIcon = UserInputService.MouseIconEnabled
+                
+                -- On ouvre l'accès pour le menu
                 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
                 UserInputService.MouseIconEnabled = true
             else
-                -- Menu fermé : La souris se verrouille
-                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-                UserInputService.MouseIconEnabled = false
+                -- On rend la main au jeu !
+                UserInputService.MouseBehavior = LastMouseState
+                UserInputService.MouseIconEnabled = LastMouseIcon
             end
         end
         
@@ -1047,7 +1063,7 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
-    -- Boucle propre sans forçage de souris
+    -- On a retiré le forçage continuel de la souris d'ici
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -1274,7 +1290,7 @@ do
     task.spawn(function()
         pcall(function()
             Window.CurrentConfig = ConfigManager:CreateConfig(SaveName)
-            --Window.CurrentConfig:Load()
+            Window.CurrentConfig:Load()
         end)
     end)
 
