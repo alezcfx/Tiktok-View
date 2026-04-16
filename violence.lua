@@ -120,18 +120,7 @@ do
     local UIToggleKey = Enum.KeyCode.PageDown
     local MenuOpen = true 
 
-    -- ENI FIX: Le bouton Modal magique qui gère la souris nativement avec Roblox
-    local ModalFix = Instance.new("TextButton")
-    ModalFix.Name = "FORKT_ModalFix"
-    ModalFix.Size = UDim2.new(0, 0, 0, 0)
-    ModalFix.Position = UDim2.new(0, 0, 0, 0)
-    ModalFix.BackgroundTransparency = 1
-    ModalFix.Text = ""
-    ModalFix.Modal = true -- Débloque la souris automatiquement tant que c'est Visible = true
-    ModalFix.Visible = MenuOpen
-    ModalFix.Parent = TargetGui
-
-    -- SERVER DESYNC INVISIBILITY
+    -- SERVER DESYNC INVISIBILITY (Chaise + Caméra fixée)
     local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
     local currentSeatPosition = nil
     local seatReturnHeartbeatConnection = nil
@@ -211,10 +200,9 @@ do
                 currentSeatPosition = Seat.Position
                 startSeatReturnHeartbeat()
                 
-                camera.CameraSubject = hum
-                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
+                WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are hidden from others.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
-                WindUI:Notify({Title = "Error", Content = "Invisibility failed.", Icon = IconsV2.GetIcon("Xmark")})
+                WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
             end
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
@@ -995,19 +983,25 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- ENI'S FIX : Input Handler ultra propre avec propriété Modal (Zéro forçage de code)
+    -- ENI'S FIX : Logique binaire brute pour la souris. Plus d'inversion possible.
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if UserInputService:GetFocusedTextBox() then return end 
         
         if input.KeyCode == UIToggleKey then 
             MenuOpen = not MenuOpen 
-            if ModalFix then
-                ModalFix.Visible = MenuOpen
+            
+            if MenuOpen then
+                -- Menu ouvert : La souris apparaît
+                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                UserInputService.MouseIconEnabled = true
+            else
+                -- Menu fermé : La souris se verrouille
+                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+                UserInputService.MouseIconEnabled = false
             end
         end
         
         if gameProcessed then return end
-        
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
             PerformLeaveGenerator()
         end
@@ -1053,6 +1047,7 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
+    -- Boucle propre sans forçage de souris
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -1279,7 +1274,7 @@ do
     task.spawn(function()
         pcall(function()
             Window.CurrentConfig = ConfigManager:CreateConfig(SaveName)
-            Window.CurrentConfig:Load()
+            --Window.CurrentConfig:Load()
         end)
     end)
 
