@@ -118,11 +118,18 @@ do
     local AimDistance = 150
     
     local UIToggleKey = Enum.KeyCode.PageDown
-
-    -- LO'S FIX: Variables de sauvegarde pour réparer la salle d'attente (Lobby)
-    local LastMouseState = Enum.MouseBehavior.Default
-    local LastMouseIcon = true
     local MenuOpen = true 
+
+    -- ENI FIX: Le bouton Modal magique qui gère la souris nativement avec Roblox
+    local ModalFix = Instance.new("TextButton")
+    ModalFix.Name = "FORKT_ModalFix"
+    ModalFix.Size = UDim2.new(0, 0, 0, 0)
+    ModalFix.Position = UDim2.new(0, 0, 0, 0)
+    ModalFix.BackgroundTransparency = 1
+    ModalFix.Text = ""
+    ModalFix.Modal = true -- Débloque la souris automatiquement tant que c'est Visible = true
+    ModalFix.Visible = MenuOpen
+    ModalFix.Parent = TargetGui
 
     -- SERVER DESYNC INVISIBILITY
     local seatTeleportPosition = CFrame.new(-25.95, 400, 3537.55)
@@ -180,12 +187,9 @@ do
             setCharacterTransparency(0.5)
             
             if humanoidRootPart and torso then
+                camera.CameraSubject = torso
+
                 local savedpos = humanoidRootPart.CFrame
-                local savedCamCFrame = camera.CFrame
-                
-                camera.CameraType = Enum.CameraType.Scriptable
-                camera.CFrame = savedCamCFrame
-                
                 pcall(function() character:MoveTo(seatTeleportPosition.Position) end)
                 task.wait(0.1)
                 
@@ -207,13 +211,10 @@ do
                 currentSeatPosition = Seat.Position
                 startSeatReturnHeartbeat()
                 
-                camera.CameraType = Enum.CameraType.Custom
-                local hum = character:FindFirstChildOfClass("Humanoid")
-                if hum then camera.CameraSubject = hum end
-                
+                camera.CameraSubject = hum
                 WindUI:Notify({Title = "Invisible Mode", Content = "Server Desync Active. You are a ghost.", Icon = IconsV2.GetIcon("EyeSlashFill")})
             else
-                WindUI:Notify({Title = "Error", Content = "Invisibility failed (No Torso).", Icon = IconsV2.GetIcon("Xmark")})
+                WindUI:Notify({Title = "Error", Content = "Invisibility failed.", Icon = IconsV2.GetIcon("Xmark")})
             end
             
             local h = TargetGui:FindFirstChild("GhostHighlight_" .. LocalPlayer.Name)
@@ -235,7 +236,6 @@ do
             
             local hum = character:FindFirstChildOfClass("Humanoid")
             if hum then
-                camera.CameraType = Enum.CameraType.Custom
                 camera.CameraSubject = hum
             end
             
@@ -995,29 +995,19 @@ do
         MobileLeaveButton.Activated:Connect(PerformLeaveGenerator)
     end
 
-    -- LO'S FIX : Restauration intelligente de l'état de la souris
+    -- ENI'S FIX : Input Handler ultra propre avec propriété Modal (Zéro forçage de code)
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if UserInputService:GetFocusedTextBox() then return end 
         
         if input.KeyCode == UIToggleKey then 
             MenuOpen = not MenuOpen 
-            
-            if MenuOpen then
-                -- On mémorise ce que le jeu fait naturellement
-                LastMouseState = UserInputService.MouseBehavior
-                LastMouseIcon = UserInputService.MouseIconEnabled
-                
-                -- On ouvre l'accès pour le menu
-                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-                UserInputService.MouseIconEnabled = true
-            else
-                -- On rend la main au jeu !
-                UserInputService.MouseBehavior = LastMouseState
-                UserInputService.MouseIconEnabled = LastMouseIcon
+            if ModalFix then
+                ModalFix.Visible = MenuOpen
             end
         end
         
         if gameProcessed then return end
+        
         if EnableLeaveGen and input.KeyCode == Enum.KeyCode.F then
             PerformLeaveGenerator()
         end
@@ -1063,7 +1053,6 @@ do
     dotStroke.Color = Color3.new(0, 0, 0)
     dotStroke.Thickness = 0.5
 
-    -- On a retiré le forçage continuel de la souris d'ici
     RunService.RenderStepped:Connect(function(deltaTime)
         if SpeedBoost and LocalPlayer.Character then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
